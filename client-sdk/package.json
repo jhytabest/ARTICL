@@ -1,0 +1,29 @@
+{
+  "name": "articl-client",
+  "version": "1.0.0",
+  "description": "ARTICL - API Resource Ticket Incentive & Compensation Ledger Client Library",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "articl",
+    "api",
+    "pay-per-call",
+    "blockchain",
+    "web3",
+    "ticket",
+    "monetization"
+  ],
+  "author": "jhytabest",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}
