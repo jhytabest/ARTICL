@@ -1,68 +1,68 @@
 /**
- * Example: Using ARTICL as a Client
+ * Example: buyer flow for the new two-contract architecture.
  *
- * This example shows how to:
- * 1. Deposit funds
- * 2. Buy tickets
- * 3. Use the secrets to access APIs
+ * Steps:
+ * 1) Mint ARTICL by sending ETH
+ * 2) Approve marketplace to spend ARTICL
+ * 3) Build & sign a Call (EIP-712) for a specific API id / amount / nonce
+ * 4) Send the signed payload to the publisher's backend (off-chain)
  */
 
-import { ethers } from 'ethers';
-import { ARTICLClient } from '../client-sdk/src';
+import { ethers } from "ethers";
+import { ARTICLClient } from "../client-sdk/src";
 
 async function main() {
-  // Setup provider and signer
-  const provider = new ethers.JsonRpcProvider('http://localhost:8545'); // Anvil/Hardhat
-  const signer = new ethers.Wallet('YOUR_PRIVATE_KEY', provider);
+  const provider = new ethers.JsonRpcProvider("http://localhost:8545"); // Anvil/Hardhat
+  const signer = new ethers.Wallet("YOUR_PRIVATE_KEY", provider);
 
-  // Initialize ARTICL client
+  const TOKEN_ADDRESS = "0x..."; // deployed ARTICL token
+  const MARKETPLACE_ADDRESS = "0x..."; // deployed marketplace
+
   const articl = new ARTICLClient({
-    contractAddress: '0x...', // Your deployed contract address
+    tokenAddress: TOKEN_ADDRESS,
+    marketplaceAddress: MARKETPLACE_ADDRESS,
     provider,
-    signer
+    signer,
   });
 
-  console.log('Client address:', await signer.getAddress());
+  const buyer = await signer.getAddress();
+  console.log("Buyer:", buyer);
 
-  // 1. Deposit funds to prepaid balance
-  console.log('\n📥 Depositing funds...');
-  const depositTx = await articl.deposit(ethers.parseEther('1.0'));
-  await depositTx.wait();
-  console.log('Deposited 1 ETH');
+  console.log("\n1) Minting ARTICL for 1 ETH...");
+  await (await articl.mint(buyer, ethers.parseEther("1"))).wait();
+  console.log("   Balance:", (await articl.balanceOf(buyer)).toString(), "ARTICL");
 
-  // Check balance
-  const balance = await articl.getClientBalance();
-  console.log('Prepaid balance:', ethers.formatEther(balance), 'ETH');
+  console.log("\n2) Approving marketplace to spend ARTICL...");
+  await (await articl.approveMarketplace(ethers.MaxUint256)).wait();
 
-  // 2. Get publisher information
-  const publisherAddress = '0x...'; // Publisher's address
-  const publisher = await articl.getPublisher(publisherAddress);
-  console.log('\n📊 Publisher Info:');
-  console.log('  Domain:', publisher.domain);
-  console.log('  Price per call:', ethers.formatEther(publisher.pricePerCall), 'ETH');
+  const apiId = 1n; // obtained from publisher's listing
+  const amount = 25_000_000n; // pays 0.25 ETH given 1 ARTICL = 1e-8 ETH
+  const nonce = 1n; // single-use
 
-  // 3. Buy tickets and get secrets
-  console.log('\n🎫 Buying 10 tickets...');
-  const secrets = await articl.buyTicketsAndGetSecrets(publisherAddress, 10);
-  console.log('Purchased 10 tickets!');
-  console.log('\n💾 Save these secrets to use the API:');
-  secrets.forEach((secret, i) => {
-    console.log(`  Ticket ${i + 1}: ${secret}`);
-  });
+  console.log("\n3) Signing call authorization (EIP-712) ...");
+  const signed = await articl.signCall({ apiId, amount, nonce });
+  const digest = await articl.hashCall(signed);
+  console.log("   Signature:", signed.signature);
+  console.log("   Digest:", digest);
 
-  // 4. Verify a ticket (what the publisher would do)
-  console.log('\n✅ Verifying first ticket...');
-  const isValid = await articl.verifyTicketWithSecret(publisherAddress, secrets[0]);
-  console.log('Ticket valid:', isValid);
-
-  console.log('\n🎉 Done! You can now use these secrets as API keys:');
-  console.log('Example API call:');
-  console.log(`  curl -H "X-ARTICL-Access-Key: ${secrets[0]}" https://${publisher.domain}/api/resource`);
+  console.log("\n4) Send this payload to the publisher's HTTP endpoint:");
+  console.log(
+    JSON.stringify(
+      {
+        buyer: signed.buyer,
+        apiId: signed.apiId.toString(),
+        amount: signed.amount.toString(),
+        nonce: signed.nonce.toString(),
+        signature: signed.signature,
+        digest,
+      },
+      null,
+      2
+    )
+  );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch(error => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

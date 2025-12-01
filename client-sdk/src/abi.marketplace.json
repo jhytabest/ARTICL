@@ -1,0 +1,162 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_token",
+        "type": "address",
+        "internalType": "contract ARTICL"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "DOMAIN_SEPARATOR",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "apis",
+    "inputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "outputs": [
+      { "name": "publisher", "type": "address", "internalType": "address" },
+      { "name": "name", "type": "string", "internalType": "string" },
+      { "name": "metadataURI", "type": "string", "internalType": "string" },
+      { "name": "recommendedPrice", "type": "uint256", "internalType": "uint256" },
+      { "name": "exists", "type": "bool", "internalType": "bool" }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hashCall",
+    "inputs": [
+      { "name": "buyer", "type": "address", "internalType": "address" },
+      { "name": "apiId", "type": "uint256", "internalType": "uint256" },
+      { "name": "amount", "type": "uint256", "internalType": "uint256" },
+      { "name": "nonce", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextApiId",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "redeemCall",
+    "inputs": [
+      {
+        "name": "callData",
+        "type": "tuple",
+        "internalType": "struct ARTICLMarketplace.SignedCall",
+        "components": [
+          { "name": "buyer", "type": "address", "internalType": "address" },
+          { "name": "apiId", "type": "uint256", "internalType": "uint256" },
+          { "name": "amount", "type": "uint256", "internalType": "uint256" },
+          { "name": "nonce", "type": "uint256", "internalType": "uint256" },
+          { "name": "signature", "type": "bytes", "internalType": "bytes" }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "redeemCalls",
+    "inputs": [
+      {
+        "name": "calls",
+        "type": "tuple[]",
+        "internalType": "struct ARTICLMarketplace.SignedCall[]",
+        "components": [
+          { "name": "buyer", "type": "address", "internalType": "address" },
+          { "name": "apiId", "type": "uint256", "internalType": "uint256" },
+          { "name": "amount", "type": "uint256", "internalType": "uint256" },
+          { "name": "nonce", "type": "uint256", "internalType": "uint256" },
+          { "name": "signature", "type": "bytes", "internalType": "bytes" }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "registerApi",
+    "inputs": [
+      { "name": "name", "type": "string", "internalType": "string" },
+      { "name": "metadataURI", "type": "string", "internalType": "string" },
+      { "name": "recommendedPrice", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [{ "name": "apiId", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "token",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "updateApi",
+    "inputs": [
+      { "name": "apiId", "type": "uint256", "internalType": "uint256" },
+      { "name": "metadataURI", "type": "string", "internalType": "string" },
+      { "name": "recommendedPrice", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "usedNonces",
+    "inputs": [
+      { "name": "", "type": "address", "internalType": "address" },
+      { "name": "", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "ApiRegistered",
+    "inputs": [
+      { "name": "apiId", "type": "uint256", "indexed": true, "internalType": "uint256" },
+      { "name": "publisher", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "name", "type": "string", "indexed": false, "internalType": "string" },
+      { "name": "metadataURI", "type": "string", "indexed": false, "internalType": "string" },
+      { "name": "recommendedPrice", "type": "uint256", "indexed": false, "internalType": "uint256" }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "ApiUpdated",
+    "inputs": [
+      { "name": "apiId", "type": "uint256", "indexed": true, "internalType": "uint256" },
+      { "name": "metadataURI", "type": "string", "indexed": false, "internalType": "string" },
+      { "name": "recommendedPrice", "type": "uint256", "indexed": false, "internalType": "uint256" }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "CallRedeemed",
+    "inputs": [
+      { "name": "buyer", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "publisher", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "apiId", "type": "uint256", "indexed": true, "internalType": "uint256" },
+      { "name": "amount", "type": "uint256", "indexed": false, "internalType": "uint256" },
+      { "name": "nonce", "type": "uint256", "indexed": false, "internalType": "uint256" }
+    ]
+  }
+]

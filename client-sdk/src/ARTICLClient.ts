@@ -1,274 +1,189 @@
-import { ethers, Contract, Signer, Provider } from 'ethers';
-import ABI from './abi.json';
+import { Provider, Signer, TypedDataDomain, TypedDataField, ethers } from "ethers";
+import marketplaceAbi from "./abi.marketplace.json";
+import tokenAbi from "./abi.token.json";
 
-/**
- * Configuration for ARTICL Client
- */
 export interface ARTICLConfig {
-  contractAddress: string;
+  tokenAddress: string;
+  marketplaceAddress: string;
   provider: Provider;
   signer?: Signer;
 }
 
-/**
- * Publisher information
- */
-export interface Publisher {
-  domain: string;
-  pricePerCall: bigint;
-  payoutWallet: string;
-}
-
-/**
- * Ticket information
- */
-export interface Ticket {
-  client: string;
+export interface ApiOffering {
+  id: bigint;
   publisher: string;
-  isConsumed: boolean;
-  purchasedAt: bigint;
+  name: string;
+  metadataURI: string;
+  recommendedPrice: bigint;
+  exists: boolean;
 }
 
+export interface CallAuthorization {
+  buyer: string;
+  apiId: bigint;
+  amount: bigint;
+  nonce: bigint;
+}
+
+export interface SignedCall extends CallAuthorization {
+  signature: string;
+}
+
+const CALL_TYPES: Record<string, TypedDataField[]> = {
+  Call: [
+    { name: "buyer", type: "address" },
+    { name: "apiId", type: "uint256" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+  ],
+};
+
 /**
- * ARTICL Client for interacting with the ARTICL Protocol
+ * ARTICL SDK: wraps the ARTICL ERC20 and marketplace contracts and provides
+ * helpers for EIP-712 signing/verifying of API call authorizations.
  */
 export class ARTICLClient {
-  private contract: Contract;
+  public readonly tokenAddress: string;
+  public readonly marketplaceAddress: string;
+
+  private token: any;
+  private marketplace: any;
+  private provider: Provider;
   private signer?: Signer;
 
   constructor(config: ARTICLConfig) {
-    this.contract = new Contract(config.contractAddress, ABI, config.provider);
+    this.provider = config.provider;
+    this.tokenAddress = config.tokenAddress;
+    this.marketplaceAddress = config.marketplaceAddress;
+    this.token = new ethers.Contract(config.tokenAddress, tokenAbi, config.provider);
+    this.marketplace = new ethers.Contract(config.marketplaceAddress, marketplaceAbi, config.provider);
     this.signer = config.signer;
   }
 
   /**
-   * Connect a signer to enable write operations
+   * Attach a signer to enable state-changing calls.
    */
   connect(signer: Signer): ARTICLClient {
     this.signer = signer;
-    this.contract = this.contract.connect(signer) as Contract;
+    this.token = this.token.connect(signer) as ethers.Contract;
+    this.marketplace = this.marketplace.connect(signer) as ethers.Contract;
     return this;
   }
 
-  // ============ Client Functions ============
-
   /**
-   * Deposit funds to your prepaid balance
-   * @param amount Amount in wei to deposit
+   * Mint ARTICL by sending ETH.
    */
-  async deposit(amount: bigint): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.deposit({ value: amount });
+  async mint(to: string, ethAmount: bigint) {
+    const signer = await this.requireSigner();
+    return this.token.connect(signer).mint(to, { value: ethAmount });
   }
 
   /**
-   * Get client balance
-   * @param address Client address (defaults to signer address)
+   * Redeem ARTICL back to ETH.
    */
-  async getClientBalance(address?: string): Promise<bigint> {
-    const addr = address || (await this.signer?.getAddress());
-    if (!addr) throw new Error('Address required');
-    return this.contract.clientBalances(addr);
+  async redeem(amount: bigint, to: string) {
+    const signer = await this.requireSigner();
+    return this.token.connect(signer).redeem(amount, to);
+  }
+
+  async balanceOf(address: string): Promise<bigint> {
+    return this.token.balanceOf(address);
+  }
+
+  async approveMarketplace(amount: bigint) {
+    const signer = await this.requireSigner();
+    return this.token.connect(signer).approve(this.marketplaceAddress, amount);
+  }
+
+  async allowance(owner: string, spender?: string): Promise<bigint> {
+    return this.token.allowance(owner, spender ?? this.marketplaceAddress);
+  }
+
+  // ============ Marketplace ============
+
+  async registerApi(name: string, metadataURI: string, recommendedPrice: bigint) {
+    const signer = await this.requireSigner();
+    return this.marketplace.connect(signer).registerApi(name, metadataURI, recommendedPrice);
+  }
+
+  async updateApi(apiId: bigint, metadataURI: string, recommendedPrice: bigint) {
+    const signer = await this.requireSigner();
+    return this.marketplace.connect(signer).updateApi(apiId, metadataURI, recommendedPrice);
+  }
+
+  async getApi(apiId: bigint): Promise<ApiOffering> {
+    const [publisher, name, metadataURI, recommendedPrice, exists] = await this.marketplace.apis(apiId);
+    return { id: apiId, publisher, name, metadataURI, recommendedPrice, exists };
+  }
+
+  async redeemCallOnChain(call: SignedCall) {
+    const signer = await this.requireSigner();
+    return this.marketplace.connect(signer).redeemCall(call);
+  }
+
+  async redeemCallsOnChain(calls: SignedCall[]) {
+    const signer = await this.requireSigner();
+    return this.marketplace.connect(signer).redeemCalls(calls);
+  }
+
+  async isNonceUsed(buyer: string, nonce: bigint): Promise<boolean> {
+    return this.marketplace.usedNonces(buyer, nonce);
+  }
+
+  // ============ Signatures ============
+
+  /**
+   * Return EIP-712 domain for the marketplace.
+   */
+  async domain(): Promise<TypedDataDomain> {
+    const { chainId } = await this.provider.getNetwork();
+    return {
+      name: "ARTICLMarketplace",
+      version: "1",
+      chainId,
+      verifyingContract: this.marketplaceAddress,
+    };
   }
 
   /**
-   * Generate a secret and its hash
-   * @returns Object with secret and hash
+   * Create a SignedCall using the connected signer. buyer defaults to signer address.
    */
-  generateSecret(): { secret: string; hash: string } {
-    const secret = ethers.hexlify(ethers.randomBytes(32));
-    const hash = ethers.keccak256(ethers.toUtf8Bytes(secret));
-    return { secret, hash };
+  async signCall(params: Omit<CallAuthorization, "buyer"> & { buyer?: string }): Promise<SignedCall> {
+    const signer = await this.requireSigner();
+    const buyer = params.buyer ?? (await signer.getAddress());
+    const message: CallAuthorization = {
+      buyer,
+      apiId: params.apiId,
+      amount: params.amount,
+      nonce: params.nonce,
+    };
+
+    const signature = await signer.signTypedData(await this.domain(), CALL_TYPES, message);
+    return { ...message, signature };
   }
 
   /**
-   * Compute hash from a secret
-   * @param secret The secret string
+   * Recover the signer of a call authorization (off-chain verification).
    */
-  hashSecret(secret: string): string {
-    return ethers.keccak256(ethers.toUtf8Bytes(secret));
+  async recoverCallSigner(call: CallAuthorization, signature: string): Promise<string> {
+    return ethers.verifyTypedData(await this.domain(), CALL_TYPES, call, signature);
   }
 
   /**
-   * Buy a single ticket
-   * @param publisherAddress Publisher's address
-   * @param ticketHash Hash of the secret
+   * Computes the on-chain digest (matches marketplace.hashCall).
    */
-  async buyTicket(
-    publisherAddress: string,
-    ticketHash: string
-  ): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.buyTicket(publisherAddress, ticketHash);
+  async hashCall(call: CallAuthorization): Promise<string> {
+    return this.marketplace.hashCall(call.buyer, call.apiId, call.amount, call.nonce);
   }
 
-  /**
-   * Buy multiple tickets at once
-   * @param publisherAddress Publisher's address
-   * @param ticketHashes Array of ticket hashes
-   */
-  async buyTickets(
-    publisherAddress: string,
-    ticketHashes: string[]
-  ): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.buyTickets(publisherAddress, ticketHashes);
-  }
+  // ============ Helpers ============
 
-  /**
-   * Buy N tickets and return their secrets
-   * @param publisherAddress Publisher's address
-   * @param count Number of tickets to buy
-   * @returns Array of secrets (save these to use the API!)
-   */
-  async buyTicketsAndGetSecrets(
-    publisherAddress: string,
-    count: number
-  ): Promise<string[]> {
-    const tickets: { secret: string; hash: string }[] = [];
-
-    // Generate secrets and hashes
-    for (let i = 0; i < count; i++) {
-      tickets.push(this.generateSecret());
+  private async requireSigner(): Promise<Signer> {
+    if (!this.signer) {
+      throw new Error("Signer required for this operation");
     }
-
-    // Buy tickets
-    const hashes = tickets.map(t => t.hash);
-    const tx = await this.buyTickets(publisherAddress, hashes);
-    await tx.wait();
-
-    // Return secrets
-    return tickets.map(t => t.secret);
-  }
-
-  // ============ Publisher Functions ============
-
-  /**
-   * Register as a publisher
-   * @param domain Your API domain
-   * @param pricePerCall Price in wei per API call
-   * @param payoutWallet Wallet to receive payments
-   */
-  async registerPublisher(
-    domain: string,
-    pricePerCall: bigint,
-    payoutWallet: string
-  ): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.registerPublisher(domain, pricePerCall, payoutWallet);
-  }
-
-  /**
-   * Update your price per call
-   * @param newPrice New price in wei
-   */
-  async updatePrice(newPrice: bigint): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.updatePrice(newPrice);
-  }
-
-  /**
-   * Withdraw accumulated revenue
-   */
-  async withdraw(): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.withdraw();
-  }
-
-  /**
-   * Mark a ticket as consumed
-   * @param ticketHash The hash of the secret that was used
-   */
-  async consumeTicket(ticketHash: string): Promise<ethers.ContractTransactionResponse> {
-    if (!this.signer) throw new Error('Signer required for this operation');
-    return this.contract.consumeTicket(ticketHash);
-  }
-
-  /**
-   * Get publisher balance
-   * @param address Publisher address (defaults to signer address)
-   */
-  async getPublisherBalance(address?: string): Promise<bigint> {
-    const addr = address || (await this.signer?.getAddress());
-    if (!addr) throw new Error('Address required');
-    return this.contract.publisherBalances(addr);
-  }
-
-  // ============ View Functions ============
-
-  /**
-   * Verify if a ticket is valid
-   * @param publisherAddress Publisher's address
-   * @param ticketHash Hash to verify
-   */
-  async verifyTicket(publisherAddress: string, ticketHash: string): Promise<boolean> {
-    return this.contract.verifyTicket(publisherAddress, ticketHash);
-  }
-
-  /**
-   * Verify a ticket using the secret directly
-   * @param publisherAddress Publisher's address
-   * @param secret The secret string
-   */
-  async verifyTicketWithSecret(publisherAddress: string, secret: string): Promise<boolean> {
-    const hash = this.hashSecret(secret);
-    return this.verifyTicket(publisherAddress, hash);
-  }
-
-  /**
-   * Get publisher information
-   * @param publisherAddress Publisher's address
-   */
-  async getPublisher(publisherAddress: string): Promise<Publisher> {
-    const [domain, pricePerCall, payoutWallet] = await this.contract.getPublisher(publisherAddress);
-    return { domain, pricePerCall, payoutWallet };
-  }
-
-  /**
-   * Get ticket information
-   * @param ticketHash The ticket hash
-   */
-  async getTicket(ticketHash: string): Promise<Ticket> {
-    const [client, publisher, isConsumed, purchasedAt] = await this.contract.getTicket(ticketHash);
-    return { client, publisher, isConsumed, purchasedAt };
-  }
-
-  // ============ Event Listeners ============
-
-  /**
-   * Listen for ticket purchases
-   * @param callback Function to call when a ticket is purchased
-   */
-  onTicketPurchased(
-    callback: (client: string, publisher: string, ticketHash: string, price: bigint) => void
-  ) {
-    this.contract.on('TicketPurchased', callback);
-  }
-
-  /**
-   * Listen for publisher registrations
-   * @param callback Function to call when a publisher registers
-   */
-  onPublisherRegistered(
-    callback: (publisher: string, domain: string, pricePerCall: bigint, payoutWallet: string) => void
-  ) {
-    this.contract.on('PublisherRegistered', callback);
-  }
-
-  /**
-   * Listen for ticket consumption
-   * @param callback Function to call when a ticket is consumed
-   */
-  onTicketConsumed(
-    callback: (publisher: string, ticketHash: string) => void
-  ) {
-    this.contract.on('TicketConsumed', callback);
-  }
-
-  /**
-   * Remove all event listeners
-   */
-  removeAllListeners() {
-    this.contract.removeAllListeners();
+    return this.signer;
   }
 }
+
+export const CALL_TYPED_DATA = CALL_TYPES;
