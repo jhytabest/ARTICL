@@ -15,6 +15,7 @@ const config: PlaywrightTestConfig = {
     env: {
       NEXT_PUBLIC_ARTICL_ADDRESS: process.env.NEXT_PUBLIC_ARTICL_ADDRESS || "0x58Da8f333587FD921b6055c868a9da495302751D",
       NEXT_PUBLIC_RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || "",
+      NEXT_PUBLIC_TEST_MODE: "true",
     },
   },
   use: {

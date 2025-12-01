@@ -7,6 +7,7 @@ import { ARTICLClient } from "@/lib/articl";
 
 const contractAddress = process.env.NEXT_PUBLIC_ARTICL_ADDRESS || "";
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "";
+const testMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
 const staticReadClient =
   rpcUrl && contractAddress
     ? new ARTICLClient({ contractAddress, provider: new ethers.JsonRpcProvider(rpcUrl) })
@@ -70,19 +71,37 @@ export default function Home() {
     return fallback;
   };
 
-  const fetchPublisher = useCallback(async (client: ARTICLClient | null, addr: string) => {
-    if (!client || !addr) return;
-    try {
-      const pub = await client.getPublisher(addr);
-      setPublisherDomain(pub.domain || addr);
-      setPublisherPrice(ethers.formatEther(pub.pricePerCall));
-    } catch {
-      setPublisherDomain("-");
-      setPublisherPrice("-");
-    }
-  }, []);
+  const fetchPublisher = useCallback(
+    async (client: ARTICLClient | null, addr: string) => {
+      if (!addr) return;
+      if (testMode) {
+        setPublisherDomain("Test API");
+        setPublisherPrice("0.01");
+        return;
+      }
+      if (!client) return;
+      try {
+        const pub = await client.getPublisher(addr);
+        setPublisherDomain(pub.domain || addr);
+        setPublisherPrice(ethers.formatEther(pub.pricePerCall));
+      } catch {
+        setPublisherDomain("-");
+        setPublisherPrice("-");
+      }
+    },
+    []
+  );
 
   const connect = async () => {
+    if (testMode) {
+      setAccount("0xTestUser");
+      setStatus({ kind: "success", message: "Wallet connected (test mode)" });
+      setBalance("1.5000");
+      if (selectedPublisher) {
+        await fetchPublisher(readClient, selectedPublisher);
+      }
+      return;
+    }
     const eth = (window as { ethereum?: unknown }).ethereum;
     if (!eth) {
       setStatus({ kind: "error", message: "No wallet found (window.ethereum missing)" });
@@ -111,6 +130,13 @@ export default function Home() {
   };
 
   const doDeposit = async () => {
+    if (testMode) {
+      const curr = parseFloat(balance === "-" ? "0" : balance);
+      const next = curr + parseFloat(depositAmount || "0");
+      setBalance(next.toFixed(4));
+      setStatus({ kind: "success", message: "Deposit complete (test mode)" });
+      return;
+    }
     if (!writeClient) return setStatus({ kind: "error", message: "Connect wallet first" });
     try {
       setStatus({ kind: "loading", message: "Depositing..." });
@@ -125,8 +151,15 @@ export default function Home() {
   };
 
   const doBuyTickets = async () => {
-    if (!writeClient) return setStatus({ kind: "error", message: "Connect wallet first" });
     if (!selectedPublisher) return setStatus({ kind: "error", message: "Select an API" });
+    if (testMode) {
+      const generated = Array.from({ length: ticketCount }, (_, i) => `mock-secret-${i + 1}`);
+      setSecrets(generated);
+      setPurchasedTotal((prev) => prev + ticketCount);
+      setStatus({ kind: "success", message: "Tickets purchased (test mode)" });
+      return;
+    }
+    if (!writeClient) return setStatus({ kind: "error", message: "Connect wallet first" });
     try {
       setStatus({ kind: "loading", message: "Buying tickets..." });
       const result = await writeClient.buyTicketsAndGetSecrets(selectedPublisher, ticketCount);
@@ -140,6 +173,11 @@ export default function Home() {
   };
 
   const doVerify = async () => {
+    if (testMode) {
+      setVerifyResult("Valid");
+      setStatus({ kind: "success", message: "Ticket valid (test mode)" });
+      return;
+    }
     if (!readClient || !selectedPublisher) return;
     try {
       setStatus({ kind: "loading", message: "Verifying..." });
@@ -358,10 +396,13 @@ export default function Home() {
               <span className="chip chip-soft">escrowed</span>
             </div>
             <div className="form-grid">
-              <label className="label">Amount (ETH)</label>
+              <label className="label" htmlFor="deposit-amount">
+                Amount (ETH)
+              </label>
               <div className="field-row">
                 <input
                   className="input"
+                  id="deposit-amount"
                   type="number"
                   min="0"
                   step="0.001"
@@ -425,10 +466,13 @@ export default function Home() {
               )}
             </div>
             <div className="form-grid">
-              <label className="label">How many calls?</label>
+              <label className="label" htmlFor="call-count">
+                How many calls?
+              </label>
               <div className="field-row">
                 <input
                   className="input"
+                  id="call-count"
                   type="number"
                   min="1"
                   value={ticketCount}
