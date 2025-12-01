@@ -5,29 +5,29 @@
     "signature": ""
   },
   "baseBuilder": {
-    "ownerAddress": "0xA5753F72a89Cd881C22053c1f00a8B9534E330f8"
+    "ownerAddress": "0x77b389FC982F325804f835D01605cCC2E64d7E05"
   },
   "miniapp": {
     "version": "1",
     "name": "ARTICL Mini App",
     "homeUrl": "https://articl.vercel.app/",
-    "iconUrl": "https://articl.vercel.app//icon.png",
-    "splashImageUrl": "https://articl.vercel.app//splash.png",
+    "iconUrl": "https://articl.vercel.app/icon.png",
+    "splashImageUrl": "https://articl.vercel.app/splash.png",
     "splashBackgroundColor": "#0C0C0D",
-    "webhookUrl": "https://articl.vercel.app//api/webhook",
+    "webhookUrl": "https://articl.vercel.app/api/webhook",
     "subtitle": "Pay-per-call API tickets on Base",
     "description": "Buy and redeem hash-based API access tickets powered by ARTICL.",
     "screenshotUrls": [
-      "https://articl.vercel.app//screenshot-1.png",
-      "https://articl.vercel.app//screenshot-2.png"
+      "https://articl.vercel.app/screenshot-1.png",
+      "https://articl.vercel.app/screenshot-2.png"
     ],
     "primaryCategory": "utilities",
     "tags": ["articl", "tickets", "base", "api"],
-    "heroImageUrl": "https://articl.vercel.app//og.png",
+    "heroImageUrl": "https://articl.vercel.app/og.png",
     "tagline": "API access without subscriptions.",
     "ogTitle": "ARTICL Mini App",
     "ogDescription": "Pay-per-call API access with instant settlement on Base.",
-    "ogImageUrl": "https://articl.vercel.app//og.png",
+    "ogImageUrl": "https://articl.vercel.app/og.png",
     "noindex": true
   }
 }
