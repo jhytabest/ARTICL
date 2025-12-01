@@ -24,7 +24,7 @@ export const metadata: Metadata = {
         action: {
           type: "launch_miniapp",
           name: "ARTICL Mini App",
-          url: "https://demo.articl.app",
+          url: "https://articl.vercel.app/",
           splashImageUrl: "https://demo.articl.app/splash.png",
           splashBackgroundColor: "#0C0C0D",
         },
