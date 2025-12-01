@@ -49,6 +49,14 @@ export default function Home() {
     }
   };
 
+  const getErrorMessage = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === "object" && err && "message" in err && typeof (err as { message?: unknown }).message === "string") {
+      return (err as { message: string }).message;
+    }
+    return fallback;
+  };
+
   const fetchPublisher = useCallback(
     async (client: ARTICLClient | null, addr: string) => {
       if (!client || !addr) return;
@@ -86,12 +94,7 @@ export default function Home() {
       await refreshBalances(client, addr);
       await fetchPublisher(client, publisherAddr);
     } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err && "message" in err
-          ? // @ts-expect-error message access check
-            err.message
-          : "Connect failed";
-      setStatus({ kind: "error", message: message as string });
+      setStatus({ kind: "error", message: getErrorMessage(err, "Connect failed") });
     }
   };
 
@@ -105,12 +108,7 @@ export default function Home() {
       await refreshBalances(writeClient, account);
       setStatus({ kind: "success", message: "Deposit complete" });
     } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err && "message" in err
-          ? // @ts-expect-error message access check
-            err.message
-          : "Deposit failed";
-      setStatus({ kind: "error", message: message as string });
+      setStatus({ kind: "error", message: getErrorMessage(err, "Deposit failed") });
     }
   };
 
@@ -124,12 +122,7 @@ export default function Home() {
       await refreshBalances(writeClient, account);
       setStatus({ kind: "success", message: "Tickets purchased" });
     } catch (err: unknown) {
-      const message =
-        typeof err === "object" && err && "message" in err
-          ? // @ts-expect-error message access check
-            err.message
-          : "Purchase failed";
-      setStatus({ kind: "error", message: message as string });
+      setStatus({ kind: "error", message: getErrorMessage(err, "Purchase failed") });
     }
   };
 
@@ -142,12 +135,7 @@ export default function Home() {
       setStatus({ kind: "success", message: ok ? "Ticket valid" : "Ticket invalid" });
     } catch (err: unknown) {
       setVerifyResult("-");
-      const message =
-        typeof err === "object" && err && "message" in err
-          ? // @ts-expect-error message access check
-            err.message
-          : "Verify failed";
-      setStatus({ kind: "error", message: message as string });
+      setStatus({ kind: "error", message: getErrorMessage(err, "Verify failed") });
     }
   };
 
