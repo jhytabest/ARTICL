@@ -18,14 +18,14 @@ export const metadata: Metadata = {
   other: {
     "fc:miniapp": JSON.stringify({
       version: "next",
-      imageUrl: "https://demo.articl.app/embed-image.png",
+      imageUrl: "https://articl.vercel.app/vercel.svg",
       button: {
         title: "Launch ARTICL",
         action: {
           type: "launch_miniapp",
           name: "ARTICL Mini App",
           url: "https://articl.vercel.app/",
-          splashImageUrl: "https://demo.articl.app/splash.png",
+          splashImageUrl: "https://articl.vercel.app/vercel.svg",
           splashBackgroundColor: "#0C0C0D",
         },
       },
