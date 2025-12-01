@@ -109,6 +109,7 @@ export async function GET() {
       totalCalls: ticketsAll.length,
       volume24hEth: ethers.formatEther(volume24Wei),
       topPublishers,
+      publishers: Array.from(uniquePublishers),
     });
   } catch (err) {
     console.error(err);

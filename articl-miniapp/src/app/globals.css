@@ -380,6 +380,22 @@ p {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+}
+
+.mini-card.selectable {
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 120ms ease;
+}
+
+.mini-card.selectable:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+
+.mini-card.selectable.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .mini-stat {

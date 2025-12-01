@@ -20,9 +20,7 @@ export default function Home() {
   const [balance, setBalance] = useState<string>("-");
   const [publisherDomain, setPublisherDomain] = useState<string>("-");
   const [publisherPrice, setPublisherPrice] = useState<string>("-");
-  const [publisherAddr, setPublisherAddr] = useState<string>(
-    process.env.NEXT_PUBLIC_PUBLISHER_ADDRESS || ""
-  );
+  const [selectedPublisher, setSelectedPublisher] = useState<string>("");
   const [secrets, setSecrets] = useState<string[]>([]);
   const [depositAmount, setDepositAmount] = useState<string>("0.01");
   const [ticketCount, setTicketCount] = useState<number>(1);
@@ -42,6 +40,7 @@ export default function Home() {
     { name: "NFT-Metadata", category: "NFT", price: "0.06 USDC / 1k", uptime: "99.90%", latency: "95 ms" },
     { name: "Signals-AI", category: "AI", price: "0.12 USDC / 1k", uptime: "99.97%", latency: "80 ms" },
   ]);
+  const [publishers, setPublishers] = useState<string[]>([]);
 
   const readClient = staticReadClient;
 
@@ -71,20 +70,17 @@ export default function Home() {
     return fallback;
   };
 
-  const fetchPublisher = useCallback(
-    async (client: ARTICLClient | null, addr: string) => {
-      if (!client || !addr) return;
-      try {
-        const pub = await client.getPublisher(addr);
-        setPublisherDomain(pub.domain || addr);
-        setPublisherPrice(ethers.formatEther(pub.pricePerCall));
-      } catch {
-        setPublisherDomain("-");
-        setPublisherPrice("-");
-      }
-    },
-    []
-  );
+  const fetchPublisher = useCallback(async (client: ARTICLClient | null, addr: string) => {
+    if (!client || !addr) return;
+    try {
+      const pub = await client.getPublisher(addr);
+      setPublisherDomain(pub.domain || addr);
+      setPublisherPrice(ethers.formatEther(pub.pricePerCall));
+    } catch {
+      setPublisherDomain("-");
+      setPublisherPrice("-");
+    }
+  }, []);
 
   const connect = async () => {
     const eth = (window as { ethereum?: unknown }).ethereum;
@@ -106,7 +102,9 @@ export default function Home() {
       setWriteClient(client);
       setStatus({ kind: "success", message: "Wallet connected" });
       await refreshBalances(client, addr);
-      await fetchPublisher(client, publisherAddr);
+      if (selectedPublisher) {
+        await fetchPublisher(client, selectedPublisher);
+      }
     } catch (err: unknown) {
       setStatus({ kind: "error", message: getErrorMessage(err, "Connect failed") });
     }
@@ -128,10 +126,10 @@ export default function Home() {
 
   const doBuyTickets = async () => {
     if (!writeClient) return setStatus({ kind: "error", message: "Connect wallet first" });
-    if (!publisherAddr) return setStatus({ kind: "error", message: "Set publisher address" });
+    if (!selectedPublisher) return setStatus({ kind: "error", message: "Select an API" });
     try {
       setStatus({ kind: "loading", message: "Buying tickets..." });
-      const result = await writeClient.buyTicketsAndGetSecrets(publisherAddr, ticketCount);
+      const result = await writeClient.buyTicketsAndGetSecrets(selectedPublisher, ticketCount);
       setSecrets(result);
       setPurchasedTotal((prev) => prev + ticketCount);
       await refreshBalances(writeClient, account);
@@ -142,10 +140,10 @@ export default function Home() {
   };
 
   const doVerify = async () => {
-    if (!readClient || !publisherAddr) return;
+    if (!readClient || !selectedPublisher) return;
     try {
       setStatus({ kind: "loading", message: "Verifying..." });
-      const ok = await readClient.verifyTicketWithSecret(publisherAddr, verifySecret);
+      const ok = await readClient.verifyTicketWithSecret(selectedPublisher, verifySecret);
       setVerifyResult(ok ? "Valid" : "Invalid");
       setStatus({ kind: "success", message: ok ? "Ticket valid" : "Ticket invalid" });
     } catch (err: unknown) {
@@ -181,6 +179,7 @@ export default function Home() {
           totalCalls: number;
           volume24hEth: string;
           topPublishers: Array<{ publisher: string }>;
+          publishers: string[];
         } = await res.json();
 
         const hydrated =
@@ -211,6 +210,13 @@ export default function Home() {
           volume24hEth: `${json.volume24hEth} ETH`,
         });
 
+        if (json.publishers?.length && !selectedPublisher) {
+          setPublishers(json.publishers);
+          setSelectedPublisher(json.publishers[0]);
+        } else if (json.publishers?.length) {
+          setPublishers(json.publishers);
+        }
+
         if (hydrated.length) {
           setFeaturedCards(
             hydrated.map((h) => ({
@@ -235,13 +241,13 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [readClient]);
+  }, [readClient, selectedPublisher]);
 
   useEffect(() => {
     if (!readClient) return;
-    if (!publisherAddr) return;
-    void fetchPublisher(readClient, publisherAddr);
-  }, [readClient, publisherAddr, fetchPublisher]);
+    if (!selectedPublisher) return;
+    void fetchPublisher(readClient, selectedPublisher);
+  }, [readClient, selectedPublisher, fetchPublisher]);
 
   const heroStats = [
     { label: "APIs live", value: marketStats.apis, meta: "Marketplace inventory" },
@@ -385,25 +391,38 @@ export default function Home() {
             <div className="section-heading">
               <div>
                 <p className="muted">Step 2</p>
-                <h3>Buy API calls</h3>
+                <h3>Select an API and buy calls</h3>
               </div>
               <span className="chip chip-glow">secrets minted</span>
             </div>
-            <div className="form-grid">
-              <label className="label">Publisher address</label>
-              <input
-                className="input"
-                type="text"
-                value={publisherAddr}
-                onChange={(e) => setPublisherAddr(e.target.value.trim())}
-                placeholder="0x..."
-              />
-              <div className="meta-row">
-                <span className="chip-subtle">Domain: {publisherDomain}</span>
-                <span className="chip-subtle">
-                  Price: {publisherPrice === "-" ? "—" : `${publisherPrice} ETH / call`}
-                </span>
-              </div>
+            <div className="mini-grid">
+              {publishers.map((addr) => (
+                <button
+                  key={addr}
+                  className={`mini-card selectable ${selectedPublisher === addr ? "active" : ""}`}
+                  onClick={() => setSelectedPublisher(addr)}
+                  type="button"
+                >
+                  <div className="meta-row">
+                    <span className="chip chip-soft">API</span>
+                    <span className="chip-subtle">
+                      {selectedPublisher === addr ? "Selected" : "Tap to select"}
+                    </span>
+                  </div>
+                  <h4>{publisherDomain && selectedPublisher === addr ? publisherDomain : `${addr.slice(0, 6)}...${addr.slice(-4)}`}</h4>
+                  <div className="meta-row">
+                    <span className="chip-subtle">
+                      Price: {selectedPublisher === addr && publisherPrice !== "-" ? `${publisherPrice} ETH / call` : "—"}
+                    </span>
+                    <span className="chip-subtle mono">{addr}</span>
+                  </div>
+                </button>
+              ))}
+              {!publishers.length && (
+                <div className="mini-card">
+                  <div className="muted">No publishers yet. Waiting on-chain data...</div>
+                </div>
+              )}
             </div>
             <div className="form-grid">
               <label className="label">How many calls?</label>
@@ -415,7 +434,7 @@ export default function Home() {
                   value={ticketCount}
                   onChange={(e) => setTicketCount(parseInt(e.target.value, 10) || 1)}
                 />
-                <button className="btn" onClick={doBuyTickets} disabled={!account || !publisherAddr}>
+                <button className="btn" onClick={doBuyTickets} disabled={!account || !selectedPublisher}>
                   Buy & mint secrets
                 </button>
               </div>
@@ -451,13 +470,13 @@ export default function Home() {
                 onChange={(e) => setVerifySecret(e.target.value)}
                 placeholder="Paste a secret to verify"
               />
-              <button className="btn ghost" onClick={doVerify} disabled={!publisherAddr}>
+              <button className="btn ghost" onClick={doVerify} disabled={!selectedPublisher}>
                 Check
               </button>
             </div>
             <div className="meta-row">
               <span className="chip-subtle">Result: {verifyResult}</span>
-              <span className="chip-subtle">Publisher: {publisherAddr || "—"}</span>
+              <span className="chip-subtle">Publisher: {selectedPublisher || "—"}</span>
             </div>
             <p className="hint">Hash the secret and call verifyTicket on-chain to confirm authenticity.</p>
           </div>
