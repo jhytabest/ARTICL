@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, type CSSProperties } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ethers } from "ethers";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { ARTICLClient } from "@/lib/articl";
 
 const contractAddress = process.env.NEXT_PUBLIC_ARTICL_ADDRESS || "";
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "";
+const staticReadClient =
+  rpcUrl && contractAddress
+    ? new ARTICLClient({ contractAddress, provider: new ethers.JsonRpcProvider(rpcUrl) })
+    : null;
 
 type Status = { kind: "idle" | "loading" | "success" | "error"; message?: string };
+type FeaturedCard = { name: string; category: string; price: string; uptime: string; latency: string; publisher?: string };
 
 export default function Home() {
   const [account, setAccount] = useState<string | null>(null);
@@ -24,12 +29,21 @@ export default function Home() {
   const [verifySecret, setVerifySecret] = useState<string>("");
   const [verifyResult, setVerifyResult] = useState<string>("-");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [purchasedTotal, setPurchasedTotal] = useState<number>(0);
+  const [marketStats, setMarketStats] = useState({
+    apis: "—",
+    calls24h: "—",
+    deposits: "—",
+    totalCalls: "—",
+    volume24hEth: "—",
+  });
+  const [featuredCards, setFeaturedCards] = useState<FeaturedCard[]>([
+    { name: "PriceFeed-X", category: "DeFi", price: "0.08 USDC / 1k", uptime: "99.95%", latency: "110 ms" },
+    { name: "NFT-Metadata", category: "NFT", price: "0.06 USDC / 1k", uptime: "99.90%", latency: "95 ms" },
+    { name: "Signals-AI", category: "AI", price: "0.12 USDC / 1k", uptime: "99.97%", latency: "80 ms" },
+  ]);
 
-  const readClient = useMemo(() => {
-    if (!rpcUrl || !contractAddress) return null;
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    return new ARTICLClient({ contractAddress, provider });
-  }, []);
+  const readClient = staticReadClient;
 
   const [writeClient, setWriteClient] = useState<ARTICLClient | null>(null);
 
@@ -119,6 +133,7 @@ export default function Home() {
       setStatus({ kind: "loading", message: "Buying tickets..." });
       const result = await writeClient.buyTicketsAndGetSecrets(publisherAddr, ticketCount);
       setSecrets(result);
+      setPurchasedTotal((prev) => prev + ticketCount);
       await refreshBalances(writeClient, account);
       setStatus({ kind: "success", message: "Tickets purchased" });
     } catch (err: unknown) {
@@ -139,221 +154,360 @@ export default function Home() {
     }
   };
 
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const onPublishClick = () => {
+    setStatus({
+      kind: "success",
+      message: "Publisher flow: step through Basics → Pricing → Access → Verification (coming soon)",
+    });
+  };
+
+  useEffect(() => {
+    if (!contractAddress) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res = await fetch("/api/market-stats");
+        if (!res.ok) throw new Error("Failed to fetch stats");
+        const json: {
+          apis: number;
+          calls24h: number;
+          depositsEth: string;
+          totalCalls: number;
+          volume24hEth: string;
+          topPublishers: Array<{ publisher: string }>;
+        } = await res.json();
+
+        const hydrated =
+          readClient && json.topPublishers?.length
+            ? await Promise.all(
+                json.topPublishers.map(async (t) => {
+                  try {
+                    const pub = await readClient.getPublisher(t.publisher);
+                    return {
+                      publisher: t.publisher,
+                      name: pub.domain || t.publisher,
+                      price: `${ethers.formatEther(pub.pricePerCall)} ETH / call`,
+                    };
+                  } catch {
+                    return { publisher: t.publisher };
+                  }
+                })
+              )
+            : [];
+
+        if (cancelled) return;
+
+        setMarketStats({
+          apis: json.apis ? json.apis.toString() : "—",
+          calls24h: json.calls24h ? json.calls24h.toString() : "0",
+          deposits: `${json.depositsEth} ETH`,
+          totalCalls: json.totalCalls ? json.totalCalls.toString() : "0",
+          volume24hEth: `${json.volume24hEth} ETH`,
+        });
+
+        if (hydrated.length) {
+          setFeaturedCards(
+            hydrated.map((h) => ({
+              name: h.name || `${h.publisher?.slice(0, 6)}...${h.publisher?.slice(-4)}`,
+              category: "On-chain",
+              price: h.price || "—",
+              uptime: "—",
+              latency: "—",
+              publisher: h.publisher,
+            }))
+          );
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setStatus({ kind: "error", message: "Failed to load on-chain stats. Check Basescan key/env." });
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [readClient]);
+
   useEffect(() => {
     if (!readClient) return;
     if (!publisherAddr) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchPublisher(readClient, publisherAddr);
   }, [readClient, publisherAddr, fetchPublisher]);
 
+  const heroStats = [
+    { label: "APIs live", value: marketStats.apis, meta: "Marketplace inventory" },
+    { label: "24h calls purchased", value: marketStats.calls24h, meta: marketStats.volume24hEth },
+    { label: "Total deposits", value: marketStats.deposits, meta: "Escrowed across buyers" },
+    { label: "Total calls", value: marketStats.totalCalls, meta: "Lifetime tickets" },
+  ];
+
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <div>
-          <div style={styles.tag}>ARTICL on Base</div>
-          <h1 style={styles.title}>Buy & verify API tickets</h1>
-          <p style={styles.subtitle}>
-            Pay-per-call access keys. Connect, deposit, buy tickets, and drop secrets into your API calls.
-          </p>
-        </div>
-        <div style={styles.actions}>
-          <button style={styles.button} onClick={connect}>
-            {account ? `Connected: ${account.slice(0, 6)}...` : "Connect wallet"}
-          </button>
-          <div style={styles.envNote}>
-            RPC: {rpcUrl ? "set" : "missing"} · Contract: {contractAddress ? "set" : "missing"}
+    <div className="page-shell">
+      <div className="grid-spine">
+        <header className="nav">
+          <div className="brand">
+            <div className="orb" />
+            <div>
+              <div className="brand-name">ARTICL</div>
+              <div className="brand-sub">API marketplace · Base</div>
+            </div>
+            <span className="chip chip-soft">onchain</span>
           </div>
-        </div>
-      </header>
-
-      <main style={styles.grid}>
-        <section style={styles.card}>
-          <h3>Publisher</h3>
-          <div style={styles.formColumn}>
-            <label style={styles.label}>Publisher address</label>
-            <input
-              style={styles.input}
-              type="text"
-              value={publisherAddr}
-              onChange={(e) => setPublisherAddr(e.target.value.trim())}
-              placeholder="0x..."
-            />
-          </div>
-          <p>Domain: {publisherDomain}</p>
-          <p>Price per call: {publisherPrice === "-" ? "-" : `${publisherPrice} ETH`}</p>
-        </section>
-
-        <section style={styles.card}>
-          <h3>Your balance</h3>
-          <p>Address: {account || "not connected"}</p>
-          <p>Prepaid balance: {balance === "-" ? "-" : `${balance} ETH`}</p>
-          <div style={styles.formRow}>
-            <input
-              style={styles.input}
-              type="number"
-              min="0"
-              step="0.001"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder="0.01"
-            />
-            <button style={styles.button} onClick={doDeposit} disabled={!account}>
-              Deposit
+          <div className="nav-actions">
+            <div className="wallet-chip">
+              <span className={`dot ${account ? "online" : "offline"}`} />
+              <div>
+                <div className="chip-label">{account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Wallet"}</div>
+                <small className="muted">Prepaid {balance === "-" ? "—" : `${balance} ETH`}</small>
+              </div>
+            </div>
+            <button className="btn ghost" onClick={onPublishClick}>
+              Publish API
+            </button>
+            <button className="btn" onClick={connect}>
+              {account ? "Reconnect" : "Connect wallet"}
             </button>
           </div>
-          <small style={styles.help}>Uses `deposit` on ARTICL; funds stay in your prepaid balance.</small>
+        </header>
+
+        <section className="hero">
+          <div className="hero-copy">
+            <p className="eyebrow">Pay-per-call · No subscriptions · Web3 native</p>
+            <h1>Minimal, futuristic marketplace for API drops.</h1>
+            <p className="lede">
+              Connect, deposit once, buy API calls with secrets, and verify on-chain. Publishers post offers without
+              subscriptions—just prepaid liquidity.
+            </p>
+            <div className="hero-actions">
+              <button className="btn" onClick={() => scrollToSection("purchase")}>
+                Buy calls
+              </button>
+              <button className="btn ghost" onClick={() => scrollToSection("publish")}>
+                Publish API
+              </button>
+              <div className="chip chip-soft">
+                RPC: {rpcUrl ? "set" : "missing"} · Contract: {contractAddress ? "set" : "missing"}
+              </div>
+            </div>
+          </div>
+          <div className="stat-grid hero-stats">
+            {heroStats.map((stat) => (
+              <div key={stat.label} className="panel stat-card">
+                <p className="muted">{stat.label}</p>
+                <div className="stat-value">{stat.value}</div>
+                <p className="chip-subtle">{stat.meta}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section style={styles.card}>
-          <h3>Buy tickets</h3>
-          <div style={styles.formRow}>
-            <input
-              style={styles.input}
-              type="number"
-              min="1"
-              value={ticketCount}
-              onChange={(e) => setTicketCount(parseInt(e.target.value, 10) || 1)}
-            />
-            <button style={styles.button} onClick={doBuyTickets} disabled={!account || !publisherAddr}>
-              Buy & get secrets
-            </button>
+        <section className="panel stack">
+          <div className="section-heading">
+            <div>
+              <p className="muted">Connected account</p>
+              <h2>{account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "No wallet connected"}</h2>
+            </div>
+            <span className="chip chip-glow">Marketplace ready</span>
           </div>
-          {secrets.length > 0 && (
-            <div style={styles.list}>
-              {secrets.map((s, i) => (
-                <div key={i} style={styles.secretRow}>
-                  <span>#{i + 1}</span>
-                  <code style={styles.code}>{s}</code>
+          <div className="stat-grid">
+            <div className="stat-tile">
+              <p className="muted">Prepaid balance</p>
+              <div className="stat-value">{balance === "-" ? "—" : `${balance} ETH`}</div>
+              <p className="chip-subtle">Held in ARTICL escrow</p>
+            </div>
+            <div className="stat-tile">
+              <p className="muted">Calls purchased (session)</p>
+              <div className="stat-value">{purchasedTotal}</div>
+              <p className="chip-subtle">Latest bundle size {ticketCount}</p>
+            </div>
+            <div className="stat-tile">
+              <p className="muted">APIs available</p>
+              <div className="stat-value">{marketStats.apis}</div>
+              <p className="chip-subtle">Across DeFi · NFT · AI</p>
+            </div>
+            <div className="stat-tile">
+              <p className="muted">Verification</p>
+              <div className="stat-value">{verifyResult}</div>
+              <p className="chip-subtle">Ticket integrity status</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid-two">
+          <div className="panel stack" id="fund">
+            <div className="section-heading">
+              <div>
+                <p className="muted">Step 1</p>
+                <h3>Fund prepaid balance</h3>
+              </div>
+              <span className="chip chip-soft">escrowed</span>
+            </div>
+            <div className="form-grid">
+              <label className="label">Amount (ETH)</label>
+              <div className="field-row">
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="0.05"
+                />
+                <button className="btn" onClick={doDeposit} disabled={!account}>
+                  Deposit
+                </button>
+              </div>
+              <p className="hint">Funds stay in-contract and power your API purchases.</p>
+            </div>
+            <div className="panel inset">
+              <div className="mini-stat">
+                <p className="muted">Wallet</p>
+                <div className="mono">{account || "not connected"}</div>
+              </div>
+              <div className="mini-stat">
+                <p className="muted">Current balance</p>
+                <div className="mono">{balance === "-" ? "—" : `${balance} ETH`}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel stack" id="purchase">
+            <div className="section-heading">
+              <div>
+                <p className="muted">Step 2</p>
+                <h3>Buy API calls</h3>
+              </div>
+              <span className="chip chip-glow">secrets minted</span>
+            </div>
+            <div className="form-grid">
+              <label className="label">Publisher address</label>
+              <input
+                className="input"
+                type="text"
+                value={publisherAddr}
+                onChange={(e) => setPublisherAddr(e.target.value.trim())}
+                placeholder="0x..."
+              />
+              <div className="meta-row">
+                <span className="chip-subtle">Domain: {publisherDomain}</span>
+                <span className="chip-subtle">
+                  Price: {publisherPrice === "-" ? "—" : `${publisherPrice} ETH / call`}
+                </span>
+              </div>
+            </div>
+            <div className="form-grid">
+              <label className="label">How many calls?</label>
+              <div className="field-row">
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  value={ticketCount}
+                  onChange={(e) => setTicketCount(parseInt(e.target.value, 10) || 1)}
+                />
+                <button className="btn" onClick={doBuyTickets} disabled={!account || !publisherAddr}>
+                  Buy & mint secrets
+                </button>
+              </div>
+              <p className="hint">Each secret is a one-time API key. Keep them private.</p>
+            </div>
+            {secrets.length > 0 && (
+              <div className="secret-grid">
+                {secrets.map((s, i) => (
+                  <div key={i} className="secret-row">
+                    <div className="chip chip-soft">#{i + 1}</div>
+                    <code className="mono">{s}</code>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="grid-two">
+          <div className="panel stack" id="verify">
+            <div className="section-heading">
+              <div>
+                <p className="muted">Integrity</p>
+                <h3>Verify a secret</h3>
+              </div>
+              <span className="chip chip-soft">publisher-side</span>
+            </div>
+            <div className="field-row">
+              <input
+                className="input"
+                type="text"
+                value={verifySecret}
+                onChange={(e) => setVerifySecret(e.target.value)}
+                placeholder="Paste a secret to verify"
+              />
+              <button className="btn ghost" onClick={doVerify} disabled={!publisherAddr}>
+                Check
+              </button>
+            </div>
+            <div className="meta-row">
+              <span className="chip-subtle">Result: {verifyResult}</span>
+              <span className="chip-subtle">Publisher: {publisherAddr || "—"}</span>
+            </div>
+            <p className="hint">Hash the secret and call verifyTicket on-chain to confirm authenticity.</p>
+          </div>
+
+          <div className="panel stack" id="publish">
+            <div className="section-heading">
+              <div>
+                <p className="muted">For publishers</p>
+                <h3>Post your API offer</h3>
+              </div>
+              <span className="chip chip-glow">coming soon</span>
+            </div>
+            <p className="lede small">
+              Drop your endpoint, set price per call, connect verification, and go live to the marketplace. No
+              subscriptions, just prepaid liquidity from buyers.
+            </p>
+            <div className="field-row">
+              <button className="btn" onClick={onPublishClick}>
+                Launch publish flow
+              </button>
+              <div className="chip-subtle">Escrow-backed payouts</div>
+            </div>
+            <div className="mini-grid">
+              {featuredCards.map((api) => (
+                <div key={`${api.name}-${api.publisher || api.category}`} className="mini-card">
+                  <div className="meta-row">
+                    <span className="chip chip-soft">{api.category}</span>
+                    <span className="chip-subtle">Latency {api.latency}</span>
+                  </div>
+                  <h4>{api.name}</h4>
+                  <div className="meta-row">
+                    <span className="chip-subtle">{api.price}</span>
+                    <span className="chip-subtle">Uptime {api.uptime}</span>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-          <small style={styles.help}>Each secret is a one-time API key. Store securely.</small>
-        </section>
-
-        <section style={styles.card}>
-          <h3>Verify a secret</h3>
-          <div style={styles.formRow}>
-            <input
-              style={styles.input}
-              type="text"
-              value={verifySecret}
-              onChange={(e) => setVerifySecret(e.target.value)}
-              placeholder="Paste a secret to verify"
-            />
-            <button style={styles.button} onClick={doVerify} disabled={!publisherAddr}>
-              Check
-            </button>
           </div>
-          <p>Result: {verifyResult}</p>
-          <small style={styles.help}>Publisher flow: hash the secret and call verifyTicket.</small>
         </section>
-      </main>
 
-      <footer style={styles.footer}>
         {status.kind !== "idle" && (
-          <div
-            style={{
-              ...styles.status,
-              color: status.kind === "error" ? "#ff4d4f" : "#0f5132",
-              borderColor: status.kind === "error" ? "#ff4d4f" : "#0f5132",
-            }}
-          >
+          <div className={`status ${status.kind === "error" ? "error" : "ok"}`}>
             {status.message}
           </div>
         )}
-        <div style={styles.note}>
-          Mini app ready: we call sdk.actions.ready() on load. Host your manifest at /.well-known/farcaster.json and
-          add accountAssociation once deployed.
+        <div className="footer-note">
+          Mini app ready: sdk.actions.ready() is called on load. Host /.well-known/farcaster.json with accountAssociation
+          to finalize.
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  page: {
-    maxWidth: 960,
-    margin: "0 auto",
-    padding: "32px 24px 56px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 24,
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 16,
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-  },
-  tag: {
-    display: "inline-block",
-    padding: "4px 10px",
-    background: "#eef2ff",
-    color: "#4338ca",
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: 600,
-    marginBottom: 8,
-  },
-  title: { fontSize: 28, lineHeight: 1.2, marginBottom: 6 },
-  subtitle: { color: "#555", maxWidth: 640 },
-  actions: { display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" },
-  button: {
-    background: "#111827",
-    color: "#fff",
-    border: "none",
-    borderRadius: 10,
-    padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  envNote: { fontSize: 12, color: "#555" },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-    gap: 16,
-  },
-  card: {
-    padding: 16,
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    background: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
-  },
-  formRow: { display: "flex", gap: 8, alignItems: "center" },
-  input: {
-    flex: 1,
-    padding: "10px 12px",
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    fontSize: 14,
-  },
-  list: { display: "flex", flexDirection: "column", gap: 8 },
-  secretRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "8px 10px",
-    borderRadius: 10,
-    background: "#f9fafb",
-    border: "1px solid #e5e7eb",
-  },
-  code: { fontSize: 12, wordBreak: "break-all" },
-  help: { color: "#6b7280", fontSize: 12 },
-  footer: { display: "flex", flexDirection: "column", gap: 8 },
-  status: {
-    padding: "10px 12px",
-    borderRadius: 10,
-    border: "1px solid",
-    background: "#f8fafc",
-    fontWeight: 600,
-  },
-  note: { color: "#6b7280", fontSize: 13 },
-  formColumn: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { fontSize: 12, fontWeight: 600, color: "#4b5563" },
-};
