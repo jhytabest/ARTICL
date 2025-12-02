@@ -24,6 +24,7 @@ contract ARTICL {
     error InsufficientAllowance();
     error InsufficientBacking();
     error RedeemTransferFailed();
+    error MintRefundFailed();
 
     // ============ ERC20 Events ============
 
@@ -54,11 +55,19 @@ contract ARTICL {
         minted = (msg.value * CONVERSION_FACTOR) / 1 ether;
         if (minted == 0) revert MintWouldCreateZeroTokens();
 
+        uint256 ethRequired = (minted * 1 ether) / CONVERSION_FACTOR;
+        uint256 refund = msg.value - ethRequired;
+
         totalSupply += minted;
         balanceOf[to] += minted;
 
         emit Transfer(address(0), to, minted);
-        emit Minted(to, msg.value, minted);
+        emit Minted(msg.sender, ethRequired, minted);
+
+        if (refund != 0) {
+            (bool refundSuccess, ) = msg.sender.call{value: refund}("");
+            if (!refundSuccess) revert MintRefundFailed();
+        }
     }
 
     /**
@@ -118,9 +127,21 @@ contract ARTICL {
     // ============ Internal ============
 
     function _transfer(address from, address to, uint256 value) internal {
-        if (to == address(0)) revert ZeroAddress();
-        if (value == 0) revert ZeroAmount();
         if (balanceOf[from] < value) revert InsufficientBalance();
+
+        if (to == address(0)) {
+            unchecked {
+                balanceOf[from] -= value;
+                totalSupply -= value;
+            }
+            emit Transfer(from, address(0), value);
+            return;
+        }
+
+        if (value == 0) {
+            emit Transfer(from, to, 0);
+            return;
+        }
 
         unchecked {
             balanceOf[from] -= value;

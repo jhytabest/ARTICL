@@ -9,6 +9,9 @@ contract ARTICLTokenTest is Test {
     address public alice = address(0xA11CE);
     address public bob = address(0xB0B);
 
+    // Mirror ERC20 Transfer event for expectEmit
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
     function setUp() public {
         token = new ARTICL();
         vm.deal(alice, 10 ether);
@@ -54,12 +57,33 @@ contract ARTICLTokenTest is Test {
         token.mint{value: 1}(alice);
     }
 
-    function testRevertWhenTransferZeroAmount() public {
+    function testTransferZeroAmountAllowed() public {
+        vm.prank(alice);
+        token.mint{value: 1 ether}(alice);
+
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(alice, bob, 0);
+        vm.prank(alice);
+        token.transfer(bob, 0);
+
+        assertEq(token.balanceOf(alice), 100_000_000);
+        assertEq(token.balanceOf(bob), 0);
+    }
+
+    function testTransferFromZeroAmountPreservesAllowance() public {
         vm.prank(alice);
         token.mint{value: 1 ether}(alice);
 
         vm.prank(alice);
-        vm.expectRevert(ARTICL.ZeroAmount.selector);
-        token.transfer(bob, 0);
+        token.approve(bob, 10_000_000);
+
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(alice, bob, 0);
+        vm.prank(bob);
+        token.transferFrom(alice, bob, 0);
+
+        assertEq(token.balanceOf(alice), 100_000_000);
+        assertEq(token.balanceOf(bob), 0);
+        assertEq(token.allowance(alice, bob), 10_000_000);
     }
 }

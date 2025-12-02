@@ -181,6 +181,7 @@ contract ARTICLMarketplace {
             }
 
             _verify(c, api.publisher);
+            usedNonces[c.buyer][c.nonce] = true;
 
             prepared[i] = _PreparedCall({
                 buyer: c.buyer,
@@ -230,7 +231,6 @@ contract ARTICLMarketplace {
         // 4) Mark nonces & emit
         for (uint256 i = 0; i < length; i++) {
             _PreparedCall memory p = prepared[i];
-            usedNonces[p.buyer][p.nonce] = true;
             emit CallRedeemed(p.buyer, p.publisher, p.apiId, p.amount, p.nonce);
         }
     }
