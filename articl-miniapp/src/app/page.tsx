@@ -9,6 +9,7 @@ const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS || "";
 const marketplaceAddress = process.env.NEXT_PUBLIC_ARTICLMarketplace_ADDRESS || "";
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "";
 const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "8453");
+const testMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
 
 type Status = { kind: "idle" | "loading" | "success" | "error"; message?: string };
 
@@ -53,6 +54,9 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [tag, setTag] = useState("all");
+  const [apiName, setApiName] = useState("My API");
+  const [apiMetadataURI, setApiMetadataURI] = useState("ipfs://metadata-hash");
+  const [apiRecommendedPriceEth, setApiRecommendedPriceEth] = useState("0.001");
 
   useEffect(() => {
     sdk.actions.ready().catch(() => {
@@ -114,6 +118,7 @@ export default function Home() {
   };
 
   const refreshWallet = async (client: ARTICLClient | null, addr: string | null) => {
+    if (testMode) return;
     if (!client || !addr) return;
     try {
       const [bal, allow] = await Promise.all([client.balanceOf(addr), client.allowance(addr)]);
@@ -127,6 +132,15 @@ export default function Home() {
   };
 
   const connect = async () => {
+    if (testMode) {
+      setAccount("0xTestWallet00000000000000000000000000000000");
+      setWriteClient(null);
+      setBalanceArticl(0n);
+      setAllowance(0n);
+      setStatus({ kind: "success", message: "Wallet connected (test mode)" });
+      return;
+    }
+
     const eth = (window as { ethereum?: unknown }).ethereum;
     if (!eth) {
       setStatus({ kind: "error", message: "No wallet found (window.ethereum missing)" });
@@ -165,11 +179,18 @@ export default function Home() {
   };
 
   const handleMint = async () => {
-    if (!writeClient || !account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!writeClient && !testMode) return setStatus({ kind: "error", message: "Wallet signer missing" });
     try {
       setStatus({ kind: "loading", message: "Minting ARTICL..." });
+      if (testMode) {
+        const minted = parseEthToArticl(mintAmountEth || "0");
+        setBalanceArticl((prev) => (prev ?? 0n) + minted);
+        setStatus({ kind: "success", message: "Minted ARTICL (test mode)" });
+        return;
+      }
       const wei = ethers.parseEther(mintAmountEth || "0");
-      const tx = await writeClient.mint(account, wei);
+      const tx = await writeClient!.mint(account, wei);
       await tx.wait();
       await refreshWallet(writeClient, account);
       setStatus({ kind: "success", message: "Minted ARTICL" });
@@ -179,11 +200,20 @@ export default function Home() {
   };
 
   const handleRedeem = async () => {
-    if (!writeClient || !account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!writeClient && !testMode) return setStatus({ kind: "error", message: "Wallet signer missing" });
     try {
       setStatus({ kind: "loading", message: "Redeeming ARTICL..." });
       const tokens = parseEthToArticl(redeemAmountEth || "0");
-      const tx = await writeClient.redeem(tokens, account);
+      if (testMode) {
+        setBalanceArticl((prev) => {
+          const current = prev ?? 0n;
+          return current > tokens ? current - tokens : 0n;
+        });
+        setStatus({ kind: "success", message: "Redeemed to ETH (test mode)" });
+        return;
+      }
+      const tx = await writeClient!.redeem(tokens, account);
       await tx.wait();
       await refreshWallet(writeClient, account);
       setStatus({ kind: "success", message: "Redeemed to ETH" });
@@ -193,16 +223,73 @@ export default function Home() {
   };
 
   const handleApprove = async (value: string) => {
-    if (!writeClient || !account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!writeClient && !testMode) return setStatus({ kind: "error", message: "Wallet signer missing" });
     try {
       setStatus({ kind: "loading", message: "Updating allowance..." });
       const tokens = value === "max" ? ethers.MaxUint256 : parseEthToArticl(value);
-      const tx = await writeClient.approveMarketplace(tokens);
+      if (testMode) {
+        setAllowance(tokens);
+        setStatus({ kind: "success", message: "Allowance set (test mode)" });
+        return;
+      }
+      const tx = await writeClient!.approveMarketplace(tokens);
       await tx.wait();
       await refreshWallet(writeClient, account);
       setStatus({ kind: "success", message: "Allowance set" });
     } catch (err) {
       setStatus({ kind: "error", message: getErrorMessage(err, "Approval failed") });
+    }
+  };
+
+  const handleRegisterApi = async () => {
+    if (!account) return setStatus({ kind: "error", message: "Connect wallet first" });
+    if (!writeClient && !testMode) return setStatus({ kind: "error", message: "Wallet signer missing" });
+    try {
+      setStatus({ kind: "loading", message: "Registering API..." });
+      const price = parseEthToArticl(apiRecommendedPriceEth || "0");
+
+      if (testMode) {
+        setMarket((prev) => {
+          const existing = prev?.apis ?? [];
+          const nextId = (existing.length + 1).toString();
+          const newApi: ApiMeta = {
+            apiId: nextId,
+            name: apiName,
+            publisher: account,
+            metadataURI: apiMetadataURI,
+            recommendedPriceEth: apiRecommendedPriceEth,
+            lastPaidPriceEth: null,
+            lastPaidAtBlock: null,
+            callCount: 0,
+            metadata: null,
+          };
+          const nextStats = prev?.stats || {
+            apiCount: 0,
+            uniquePublishers: 0,
+            totalCalls: 0,
+            totalVolumeEth: "0",
+            mintedEth: "0",
+            redeemedEth: "0",
+          };
+          return {
+            stats: {
+              ...nextStats,
+              apiCount: (nextStats.apiCount ?? 0) + 1,
+              uniquePublishers: new Set([...(prev?.apis.map((a) => a.publisher) || []), account]).size,
+            },
+            apis: [...existing, newApi],
+          } as MarketData;
+        });
+        setStatus({ kind: "success", message: "API registered (test mode)" });
+        return;
+      }
+
+      const tx = await writeClient!.registerApi(apiName, apiMetadataURI, price);
+      await tx.wait();
+      setStatus({ kind: "success", message: "API registered" });
+    } catch (err) {
+      setStatus({ kind: "error", message: getErrorMessage(err, "Registration failed") });
     }
   };
 
@@ -421,6 +508,54 @@ export default function Home() {
                 ARTICL uses 0 decimals; values here are in ETH-equivalent (converted to ARTICL with 1e8 factor).
               </p>
             </div>
+          </div>
+        </section>
+
+        <section className="panel stack">
+          <div className="section-heading">
+            <div>
+              <p className="muted">Publish</p>
+              <h3>Register a new API</h3>
+            </div>
+            <span className="chip chip-soft">marketplace.registerApi</span>
+          </div>
+          <div className="form-grid">
+            <label className="label" htmlFor="api-name">
+              API name
+            </label>
+            <input
+              id="api-name"
+              className="input"
+              value={apiName}
+              onChange={(e) => setApiName(e.target.value)}
+            />
+            <label className="label" htmlFor="api-metadata">
+              Metadata URI (IPFS/HTTPS)
+            </label>
+            <input
+              id="api-metadata"
+              className="input"
+              value={apiMetadataURI}
+              onChange={(e) => setApiMetadataURI(e.target.value)}
+            />
+            <label className="label" htmlFor="api-price">
+              Recommended price (ETH)
+            </label>
+            <div className="field-row">
+              <input
+                id="api-price"
+                className="input"
+                type="number"
+                min="0"
+                step="0.0001"
+                value={apiRecommendedPriceEth}
+                onChange={(e) => setApiRecommendedPriceEth(e.target.value)}
+              />
+              <button className="btn" onClick={handleRegisterApi} disabled={!account && !testMode}>
+                Register API
+              </button>
+            </div>
+            <p className="hint">Writes to marketplace.registerApi; price is stored in ARTICL (1e8 precision).</p>
           </div>
         </section>
 

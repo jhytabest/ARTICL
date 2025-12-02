@@ -21,7 +21,8 @@ async function main() {
   const provider = new ethers.JsonRpcProvider(RPC_URL);
   const signer = new ethers.Wallet(PRIVATE_KEY, provider);
 
-  const abi = require("../src/lib/articl/abi.json");
+  // Minimal ABI for registerPublisher(domain, pricePerCall, payoutWallet)
+  const abi = ["function registerPublisher(string domain,uint256 pricePerCall,address payoutWallet)"];
   const contract = new ethers.Contract(CONTRACT, abi, signer);
 
   console.log("Registering publisher...");
