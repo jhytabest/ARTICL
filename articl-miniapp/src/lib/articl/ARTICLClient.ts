@@ -90,7 +90,8 @@ export class ARTICLClient {
    */
   async mint(to: string, ethAmount: bigint) {
     const signer = await this.requireSigner();
-    return this.token.connect(signer).mint(to, { value: ethAmount });
+    const mintFn = this.token.connect(signer).getFunction("mint");
+    return mintFn(to, { value: ethAmount });
   }
 
   /**
@@ -98,7 +99,8 @@ export class ARTICLClient {
    */
   async redeem(amount: bigint, to: string) {
     const signer = await this.requireSigner();
-    return this.token.connect(signer).redeem(amount, to);
+    const redeemFn = this.token.connect(signer).getFunction("redeem");
+    return redeemFn(amount, to);
   }
 
   async balanceOf(address: string): Promise<bigint> {
@@ -107,7 +109,8 @@ export class ARTICLClient {
 
   async approveMarketplace(amount: bigint) {
     const signer = await this.requireSigner();
-    return this.token.connect(signer).approve(this.marketplaceAddress, amount);
+    const approveFn = this.token.connect(signer).getFunction("approve");
+    return approveFn(this.marketplaceAddress, amount);
   }
 
   async allowance(owner: string, spender?: string): Promise<bigint> {
@@ -118,12 +121,14 @@ export class ARTICLClient {
 
   async registerApi(name: string, metadataURI: string, recommendedPrice: bigint) {
     const signer = await this.requireSigner();
-    return this.marketplace.connect(signer).registerApi(name, metadataURI, recommendedPrice);
+    const registerFn = this.marketplace.connect(signer).getFunction("registerApi");
+    return registerFn(name, metadataURI, recommendedPrice);
   }
 
   async updateApi(apiId: bigint, metadataURI: string, recommendedPrice: bigint) {
     const signer = await this.requireSigner();
-    return this.marketplace.connect(signer).updateApi(apiId, metadataURI, recommendedPrice);
+    const updateFn = this.marketplace.connect(signer).getFunction("updateApi");
+    return updateFn(apiId, metadataURI, recommendedPrice);
   }
 
   async getApi(apiId: bigint): Promise<ApiOffering> {
@@ -133,12 +138,14 @@ export class ARTICLClient {
 
   async redeemCallOnChain(call: SignedCall) {
     const signer = await this.requireSigner();
-    return this.marketplace.connect(signer).redeemCall(call);
+    const redeemFn = this.marketplace.connect(signer).getFunction("redeemCall");
+    return redeemFn(call);
   }
 
   async redeemCallsOnChain(calls: SignedCall[]) {
     const signer = await this.requireSigner();
-    return this.marketplace.connect(signer).redeemCalls(calls);
+    const redeemCallsFn = this.marketplace.connect(signer).getFunction("redeemCalls");
+    return redeemCallsFn(calls);
   }
 
   async isNonceUsed(buyer: string, nonce: bigint): Promise<boolean> {

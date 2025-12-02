@@ -101,6 +101,7 @@ export async function GET() {
     combined.forEach(({ type, log }) => {
       if (type === "register") {
         const parsed = iface.parseLog(log);
+        if (!parsed) return;
         const { apiId, publisher, name, metadataURI, recommendedPrice } = parsed.args as unknown as {
           apiId: bigint;
           publisher: string;
@@ -121,6 +122,7 @@ export async function GET() {
 
       if (type === "update") {
         const parsed = iface.parseLog(log);
+        if (!parsed) return;
         const { apiId, metadataURI, recommendedPrice } = parsed.args as unknown as {
           apiId: bigint;
           metadataURI: string;
@@ -136,6 +138,7 @@ export async function GET() {
 
       if (type === "call") {
         const parsed = iface.parseLog(log);
+        if (!parsed) return;
         const { apiId, amount } = parsed.args as unknown as {
           apiId: bigint;
           amount: bigint;
@@ -175,11 +178,13 @@ export async function GET() {
     let redeemedEth = 0n;
     mintLogs.forEach((log) => {
       const parsed = iface.parseLog(log);
+      if (!parsed) return;
       const { ethIn } = parsed.args as unknown as { ethIn: bigint };
       mintedEth += ethIn;
     });
     redeemLogs.forEach((log) => {
       const parsed = iface.parseLog(log);
+      if (!parsed) return;
       const { ethOut } = parsed.args as unknown as { ethOut: bigint };
       redeemedEth += ethOut;
     });
