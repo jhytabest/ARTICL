@@ -16,11 +16,11 @@ const iface = new ethers.Interface([
 ]);
 
 const topics = {
-  register: iface.getEventTopic("ApiRegistered"),
-  update: iface.getEventTopic("ApiUpdated"),
-  call: iface.getEventTopic("CallRedeemed"),
-  minted: iface.getEventTopic("Minted"),
-  redeemed: iface.getEventTopic("Redeemed"),
+  register: ethers.id("ApiRegistered(uint256,address,string,string,uint256)"),
+  update: ethers.id("ApiUpdated(uint256,string,uint256)"),
+  call: ethers.id("CallRedeemed(address,address,uint256,uint256,uint256)"),
+  minted: ethers.id("Minted(address,uint256,uint256)"),
+  redeemed: ethers.id("Redeemed(address,address,uint256,uint256)"),
 };
 
 const formatArticlToEth = (value: bigint) => ethers.formatUnits(value, 8);
