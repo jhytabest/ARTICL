@@ -45,7 +45,8 @@ test.describe("ARTICL miniapp smoke", () => {
   test("renders marketplace stats and hero copy", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByText("Catalogue of onchain APIs with live pricing.")).toBeVisible();
+    await expect(page.getByText("Catalogue of onchain APIs on Base.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Catalogue" })).toBeVisible();
     await expect(page.getByText("APIs live")).toBeVisible();
     await expect(page.getByText("2").first()).toBeVisible();
     await expect(page.getByText("Total calls")).toBeVisible();
@@ -58,7 +59,7 @@ test.describe("ARTICL miniapp smoke", () => {
   });
 
   test("wallet flows work in test mode (mint, allowance, redeem, register)", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/articl");
 
     await page.getByRole("button", { name: /connect wallet/i }).click();
     await expect(page.getByText(/wallet connected \(test mode\)/i)).toBeVisible();
@@ -75,11 +76,14 @@ test.describe("ARTICL miniapp smoke", () => {
     await page.getByRole("button", { name: /redeem/i }).click();
     await expect(page.getByText(/redeemed to eth \(test mode\)/i)).toBeVisible();
 
+    await page.goto("/publish");
+    await page.getByRole("button", { name: /connect wallet/i }).click();
+    await expect(page.getByText(/wallet connected \(test mode\)/i)).toBeVisible();
     await page.getByLabel("API name").fill("Demo API");
     await page.getByLabel("Metadata URI (IPFS/HTTPS)").fill("https://example.com/demo.json");
     await page.getByLabel("Recommended price (ETH)").fill("0.0009");
     await page.getByRole("button", { name: /register api/i }).click();
     await expect(page.getByText(/api registered \(test mode\)/i)).toBeVisible();
-    await expect(page.locator(".mini-card.selectable")).toHaveCount(3);
+    await expect(page.locator(".mini-card")).toContainText("Demo API");
   });
 });

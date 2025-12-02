@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,7 +42,29 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+        <header className="top-nav">
+          <div className="brand">
+            <div className="orb" />
+            <div>
+              <div className="brand-name">ARTICL</div>
+              <div className="brand-sub">Onchain API marketplace</div>
+            </div>
+          </div>
+          <nav className="nav-links">
+            <Link href="/" className="nav-link">
+              Catalogue
+            </Link>
+            <Link href="/articl" className="nav-link">
+              ARTICL token
+            </Link>
+            <Link href="/publish" className="nav-link">
+              Publisher
+            </Link>
+          </nav>
+        </header>
+        <main className="page-shell">
+          <div className="grid-spine">{children}</div>
+        </main>
       </body>
     </html>
   );
