@@ -24,66 +24,61 @@ export type MarketData = {
   apis: ApiMeta[];
 };
 
+const MOCK_MARKET: MarketData = {
+  stats: {
+    apiCount: 2,
+    uniquePublishers: 2,
+    totalCalls: 12,
+    totalVolumeEth: "0.4",
+    mintedEth: "8",
+    redeemedEth: "1",
+  },
+  apis: [
+    {
+      apiId: "1",
+      name: "Weather feed",
+      publisher: "0xabc0000000000000000000000000000000000abc",
+      metadataURI: "https://example.com/weather.json",
+      recommendedPriceEth: "0.0015",
+      lastPaidPriceEth: "0.002",
+      lastPaidAtBlock: 123,
+      callCount: 4,
+      metadata: { category: "data", description: "Realtime weather", tags: ["weather", "data"] },
+    },
+    {
+      apiId: "2",
+      name: "Gas oracle",
+      publisher: "0xdef0000000000000000000000000000000000def",
+      metadataURI: "https://example.com/gas.json",
+      recommendedPriceEth: "0.0005",
+      lastPaidPriceEth: null,
+      lastPaidAtBlock: null,
+      callCount: 2,
+      metadata: { category: "infra", description: "Base gas data", tags: ["gas", "infra"] },
+    },
+  ],
+};
+
 const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS || "";
 const marketplaceAddress = process.env.NEXT_PUBLIC_ARTICLMarketplace_ADDRESS || "";
 const testMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
 
 export function useMarketData() {
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [status, setStatus] = useState<{ kind: "idle" | "error" | "success"; message?: string }>({ kind: "idle" });
+  const [market, setMarket] = useState<MarketData | null>(testMode ? MOCK_MARKET : null);
+  const [status, setStatus] = useState<{ kind: "idle" | "error" | "success"; message?: string }>(
+    testMode ? { kind: "success", message: "Loaded mock catalogue (test mode)" } : { kind: "idle" }
+  );
 
   useEffect(() => {
+    if (testMode) return;
+
     let cancelled = false;
-    if (testMode) {
-      const mockMarket: MarketData = {
-        stats: {
-          apiCount: 2,
-          uniquePublishers: 2,
-          totalCalls: 12,
-          totalVolumeEth: "0.4",
-          mintedEth: "8",
-          redeemedEth: "1",
-        },
-        apis: [
-          {
-            apiId: "1",
-            name: "Weather feed",
-            publisher: "0xabc0000000000000000000000000000000000abc",
-            metadataURI: "https://example.com/weather.json",
-            recommendedPriceEth: "0.0015",
-            lastPaidPriceEth: "0.002",
-            lastPaidAtBlock: 123,
-            callCount: 4,
-            metadata: { category: "data", description: "Realtime weather", tags: ["weather", "data"] },
-          },
-          {
-            apiId: "2",
-            name: "Gas oracle",
-            publisher: "0xdef0000000000000000000000000000000000def",
-            metadataURI: "https://example.com/gas.json",
-            recommendedPriceEth: "0.0005",
-            lastPaidPriceEth: null,
-            lastPaidAtBlock: null,
-            callCount: 2,
-            metadata: { category: "infra", description: "Base gas data", tags: ["gas", "infra"] },
-          },
-        ],
-      };
-      setMarket(mockMarket);
-      setStatus({ kind: "success", message: "Loaded mock catalogue (test mode)" });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!tokenAddress || !marketplaceAddress) {
-      setStatus({ kind: "error", message: "Set token/marketplace addresses first" });
-      return () => {
-        cancelled = true;
-      };
-    }
-
     const load = async () => {
+      if (!tokenAddress || !marketplaceAddress) {
+        setStatus({ kind: "error", message: "Set token/marketplace addresses first" });
+        return;
+      }
+
       try {
         const res = await fetch("/api/market-stats");
         if (!res.ok) {

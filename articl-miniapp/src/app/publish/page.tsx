@@ -46,7 +46,7 @@ export default function PublishPage() {
   };
 
   return (
-    <div className="grid-spine">
+    <>
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Publishers</p>
@@ -167,7 +167,7 @@ export default function PublishPage() {
       )}
       {walletStatus.kind !== "error" && walletStatus.message && <div className="status">{walletStatus.message}</div>}
       {testMode && <div className="footer-note">Test mode enabled: register flow is simulated.</div>}
-    </div>
+    </>
   );
 }
 

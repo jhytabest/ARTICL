@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { ethers } from "ethers";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { ARTICLClient, ARTICL_CONVERSION_FACTOR } from "@/lib/articl";
 
 const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS || "";
@@ -40,9 +41,12 @@ export function useArticlWallet() {
       return;
     }
 
-    const eth = (window as { ethereum?: unknown }).ethereum;
+    const eth = await getEip1193Provider();
     if (!eth) {
-      setStatus({ kind: "error", message: "No wallet found (window.ethereum missing)" });
+      setStatus({
+        kind: "error",
+        message: "No wallet found. Install a Base/EVM wallet or open in the Base app.",
+      });
       return;
     }
     if (!tokenAddress || !marketplaceAddress) {
@@ -52,10 +56,26 @@ export function useArticlWallet() {
     try {
       setStatus({ kind: "loading", message: "Connecting wallet..." });
       const provider = new ethers.BrowserProvider(eth as ethers.Eip1193Provider);
-      const net = await provider.getNetwork();
-      if (chainId && net.chainId !== BigInt(chainId)) {
-        setStatus({ kind: "error", message: `Wrong network (expected chain ${chainId})` });
+      try {
+        await provider.send("eth_requestAccounts", []);
+      } catch (reqErr) {
+        setStatus({ kind: "error", message: getErrorMessage(reqErr, "Wallet connection was rejected") });
         return;
+      }
+      let net = await provider.getNetwork();
+      if (chainId && net.chainId !== BigInt(chainId)) {
+        const hexChainId = `0x${chainId.toString(16)}`;
+        try {
+          await provider.send("wallet_switchEthereumChain", [{ chainId: hexChainId }]);
+          net = await provider.getNetwork();
+        } catch (switchErr) {
+          setStatus({ kind: "error", message: getErrorMessage(switchErr, "Switch to Base mainnet to continue") });
+          return;
+        }
+        if (net.chainId !== BigInt(chainId)) {
+          setStatus({ kind: "error", message: `Wrong network (expected chain ${chainId})` });
+          return;
+        }
       }
       const signer = await provider.getSigner();
       const addr = await signer.getAddress();
@@ -205,6 +225,18 @@ export function useArticlWallet() {
     testMode,
   };
 }
+
+const getEip1193Provider = async (): Promise<ethers.Eip1193Provider | null> => {
+  if (typeof window === "undefined") return null;
+  try {
+    const miniappProvider = await sdk.wallet.getEthereumProvider();
+    if (miniappProvider) return miniappProvider as ethers.Eip1193Provider;
+  } catch (err) {
+    console.warn("Miniapp wallet provider unavailable", err);
+  }
+  const injected = (window as { ethereum?: unknown }).ethereum;
+  return injected ? (injected as ethers.Eip1193Provider) : null;
+};
 
 const formatArticlToEth = (value: bigint) => ethers.formatUnits(value, 8);
 const parseEthToArticl = (value: string) => ethers.parseUnits(value || "0", 8);

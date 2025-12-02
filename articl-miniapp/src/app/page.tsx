@@ -47,7 +47,7 @@ export default function CataloguePage() {
   ];
 
   return (
-    <div className="grid-spine">
+    <>
       <section className="kpi-row">
         <div className="kpi-meta">
           <p className="muted">Marketplace</p>
@@ -148,6 +148,6 @@ export default function CataloguePage() {
 
       {status.kind === "error" && <div className="status error">{status.message}</div>}
       {status.kind === "success" && status.message && <div className="status">{status.message}</div>}
-    </div>
+    </>
   );
 }

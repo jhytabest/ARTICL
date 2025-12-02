@@ -22,7 +22,7 @@ export default function ArticlPage() {
   }, []);
 
   return (
-    <div className="grid-spine">
+    <>
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">ARTICL token</p>
@@ -183,7 +183,7 @@ export default function ArticlPage() {
       {status.kind === "error" && <div className="status error">{status.message}</div>}
       {status.kind !== "error" && status.message && <div className="status">{status.message}</div>}
       {testMode && <div className="footer-note">Test mode enabled: actions are simulated.</div>}
-    </div>
+    </>
   );
 }
 
