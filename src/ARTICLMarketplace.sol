@@ -156,6 +156,8 @@ contract ARTICLMarketplace {
         if (length == 0) return;
 
         _PreparedCall[] memory prepared = new _PreparedCall[](length);
+        bytes32[] memory seenNonces = new bytes32[](length);
+        uint256 seenNonceCount;
         address[] memory uniqueBuyers = new address[](length);
         uint256[] memory buyerTotals = new uint256[](length);
         uint256 buyerCount;
@@ -168,6 +170,16 @@ contract ARTICLMarketplace {
         for (uint256 i = 0; i < length; i++) {
             SignedCall calldata c = calls[i];
             ApiOffering memory api = _getApi(c.apiId);
+            bytes32 nonceKey = keccak256(abi.encodePacked(c.buyer, c.nonce));
+
+            if (_indexOfBytes32(seenNonces, seenNonceCount, nonceKey) != type(uint256).max) {
+                revert NonceAlreadyUsed();
+            }
+            seenNonces[seenNonceCount] = nonceKey;
+            unchecked {
+                seenNonceCount++;
+            }
+
             _verify(c, api.publisher);
 
             prepared[i] = _PreparedCall({
@@ -273,6 +285,13 @@ contract ARTICLMarketplace {
     }
 
     function _indexOf(address[] memory list, uint256 count, address needle) private pure returns (uint256) {
+        for (uint256 i = 0; i < count; i++) {
+            if (list[i] == needle) return i;
+        }
+        return type(uint256).max;
+    }
+
+    function _indexOfBytes32(bytes32[] memory list, uint256 count, bytes32 needle) private pure returns (uint256) {
         for (uint256 i = 0; i < count; i++) {
             if (list[i] == needle) return i;
         }

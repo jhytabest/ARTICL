@@ -161,6 +161,23 @@ contract ARTICLMarketplaceTest is Test {
         assertFalse(market.usedNonces(buyer2, 6));
     }
 
+    function testBatchRedeemRevertsOnDuplicateNonceInSameBatch() public {
+        ARTICLMarketplace.SignedCall[] memory calls = new ARTICLMarketplace.SignedCall[](2);
+        calls[0] =
+            ARTICLMarketplace.SignedCall({buyer: buyer, apiId: apiId, amount: 5_000_000, nonce: 7, signature: ""});
+        calls[1] =
+            ARTICLMarketplace.SignedCall({buyer: buyer, apiId: apiId, amount: 6_000_000, nonce: 7, signature: ""});
+
+        calls[0].signature = _sign(calls[0], buyerKey);
+        calls[1].signature = _sign(calls[1], buyerKey);
+
+        vm.prank(publisher);
+        vm.expectRevert(ARTICLMarketplace.NonceAlreadyUsed.selector);
+        market.redeemCalls(calls);
+
+        assertFalse(market.usedNonces(buyer, 7));
+    }
+
     // ============ Helpers ============
 
     function _sign(ARTICLMarketplace.SignedCall memory call, uint256 privateKey)
