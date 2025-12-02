@@ -5,7 +5,7 @@ async function main() {
   const {
     RPC_URL,
     PRIVATE_KEY,
-    CONTRACT = process.env.NEXT_PUBLIC_ARTICL_ADDRESS,
+    CONTRACT = process.env.NEXT_PUBLIC_ATRICL_ADDRESS,
     DOMAIN,
     PRICE_ETHER,
     PAYOUT_WALLET,

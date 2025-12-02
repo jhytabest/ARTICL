@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { Alchemy, Network } from "alchemy-sdk";
 import { ethers } from "ethers";
 
-const tokenAddress = process.env.NEXT_PUBLIC_TOKEN_ADDRESS;
-const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
+const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS;
+const marketplaceAddress = process.env.NEXT_PUBLIC_ARTICLMarketplace_ADDRESS;
 const apiKey = process.env.ALCHEMY_API_KEY || "";
 const scanFromBlock = process.env.NEXT_PUBLIC_SCAN_FROM_BLOCK || "0";
 

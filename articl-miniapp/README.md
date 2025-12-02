@@ -15,9 +15,12 @@ cp .env.example .env.local
 ```
 
 Fill in `.env.local`:
-- `NEXT_PUBLIC_RPC_URL` — Base RPC (we set the Alchemy URL used above in `.env.example`)
-- `NEXT_PUBLIC_ARTICL_ADDRESS` — deployed ARTICL on Base mainnet (already filled: `0x58Da8f333587FD921b6055c868a9da495302751D`)
-- `NEXT_PUBLIC_PUBLISHER_ADDRESS` — your publisher address on Base (set this after you register)
+- `NEXT_PUBLIC_RPC_URL` — Base RPC (e.g., Alchemy/Infura/Base)
+- `NEXT_PUBLIC_ATRICL_ADDRESS` — deployed ARTICL token address
+- `NEXT_PUBLIC_ARTICLMarketplace_ADDRESS` — deployed ARTICLMarketplace address
+- `NEXT_PUBLIC_CHAIN_ID` — chain ID (e.g., `8453` for Base)
+- `NEXT_PUBLIC_SCAN_FROM_BLOCK` — block to start log scans from
+- `ALCHEMY_API_KEY` — for the market stats API route
 
 Then run:
 
@@ -32,7 +35,7 @@ Once deployed publicly, use the Base Build Account Association tool to generate 
 ## Embeds
 `app/layout.tsx` already includes the `fc:miniapp` meta tag. Update the URLs (image, splash, launch URL) to your deployed domain.
 ## Publisher registration (on Base)
-Use your publisher wallet on Base and call `registerPublisher(domain, pricePerCall, payoutWallet)` against the deployed contract address above. You can use `cast send`, Foundry scripts, or a small ethers script. Set `NEXT_PUBLIC_PUBLISHER_ADDRESS` to that wallet.
+Use your publisher wallet on Base and call `registerPublisher(domain, pricePerCall, payoutWallet)` against the deployed contract address above. You can use `cast send`, Foundry scripts, or a small ethers script.
 
 You can also use the helper script here:
 ```bash
@@ -41,6 +44,6 @@ PRIVATE_KEY=0x<your_publisher_key> \
 DOMAIN=api.yourdomain.com \
 PRICE_ETHER=0.001 \
 PAYOUT_WALLET=0xYourPayoutWallet \
-CONTRACT=0x58Da8f333587FD921b6055c868a9da495302751D \
+CONTRACT=0xYourARTICLTokenAddress \
 npm run register:publisher
 ```

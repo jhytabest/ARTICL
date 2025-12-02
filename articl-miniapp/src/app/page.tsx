@@ -5,8 +5,8 @@ import { sdk } from "@farcaster/miniapp-sdk";
 import { ethers } from "ethers";
 import { ARTICLClient, ARTICL_CONVERSION_FACTOR } from "@/lib/articl";
 
-const tokenAddress = process.env.NEXT_PUBLIC_TOKEN_ADDRESS || "";
-const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS || "";
+const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS || "";
+const marketplaceAddress = process.env.NEXT_PUBLIC_ARTICLMarketplace_ADDRESS || "";
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "";
 const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "8453");
 
