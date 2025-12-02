@@ -1,115 +1,209 @@
 import { NextResponse } from "next/server";
+import { Alchemy, Network } from "alchemy-sdk";
 import { ethers } from "ethers";
 
-const contractAddress = process.env.NEXT_PUBLIC_ARTICL_ADDRESS;
-const scanKey = process.env.BASESCAN_KEY || process.env.ETHERSCAN_KEY;
+const tokenAddress = process.env.NEXT_PUBLIC_TOKEN_ADDRESS;
+const marketplaceAddress = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
+const apiKey = process.env.ALCHEMY_API_KEY || "";
 const scanFromBlock = process.env.NEXT_PUBLIC_SCAN_FROM_BLOCK || "0";
-const SCAN_URL = "https://api.basescan.org/api";
 
-type Log = { data: string; topics: string[] };
+const iface = new ethers.Interface([
+  "event ApiRegistered(uint256 indexed apiId, address indexed publisher, string name, string metadataURI, uint256 recommendedPrice)",
+  "event ApiUpdated(uint256 indexed apiId, string metadataURI, uint256 recommendedPrice)",
+  "event CallRedeemed(address indexed buyer, address indexed publisher, uint256 indexed apiId, uint256 amount, uint256 nonce)",
+  "event Minted(address indexed minter, uint256 ethIn, uint256 tokenOut)",
+  "event Redeemed(address indexed redeemer, address indexed to, uint256 burned, uint256 ethOut)",
+]);
 
-async function fetchJson(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+const topics = {
+  register: iface.getEventTopic("ApiRegistered"),
+  update: iface.getEventTopic("ApiUpdated"),
+  call: iface.getEventTopic("CallRedeemed"),
+  minted: iface.getEventTopic("Minted"),
+  redeemed: iface.getEventTopic("Redeemed"),
+};
+
+const formatArticlToEth = (value: bigint) => ethers.formatUnits(value, 8);
+
+const toNumber = (value: string | number | bigint | undefined) => {
+  if (value === undefined) return 0;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "number") return value;
+  return Number(value);
+};
+
+const normalizeMetadataUri = (uri: string) => {
+  if (!uri) return "";
+  if (uri.startsWith("ipfs://")) return `https://ipfs.io/ipfs/${uri.replace("ipfs://", "")}`;
+  return uri;
+};
+
+async function fetchMetadata(uri: string) {
+  const url = normalizeMetadataUri(uri);
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json as Record<string, unknown>;
+  } catch (err) {
+    console.warn(`metadata fetch failed for ${uri}`, err);
+    return null;
+  }
 }
-
-async function getBlockNumberByTime(timestamp: number) {
-  const params = new URLSearchParams({
-    module: "block",
-    action: "getblocknobytime",
-    timestamp: timestamp.toString(),
-    closest: "before",
-    apikey: scanKey || "",
-  });
-  const json = await fetchJson(`${SCAN_URL}?${params.toString()}`);
-  if (json.status !== "1") throw new Error(json.result || "Failed to fetch block number");
-  return Number(json.result);
-}
-
-async function getLogs(topic0: string, fromBlock: string) {
-  const params = new URLSearchParams({
-    module: "logs",
-    action: "getLogs",
-    fromBlock,
-    toBlock: "latest",
-    address: contractAddress || "",
-    topic0,
-    apikey: scanKey || "",
-  });
-  const json = await fetchJson(`${SCAN_URL}?${params.toString()}`);
-  if (json.status === "0" && json.message === "No records found") return [];
-  if (json.status !== "1") throw new Error(json.result || "Failed to fetch logs");
-  return json.result as Log[];
-}
-
-const getAddressFromTopic = (topic: string) => ethers.getAddress(`0x${topic.slice(26)}`);
 
 export async function GET() {
-  if (!contractAddress) {
+  if (!tokenAddress || !marketplaceAddress) {
     return NextResponse.json({ error: "Missing contract address" }, { status: 400 });
   }
-  if (!scanKey) {
-    return NextResponse.json({ error: "Missing BASESCAN_KEY" }, { status: 400 });
+  if (!apiKey) {
+    return NextResponse.json({ error: "Missing ALCHEMY_API_KEY" }, { status: 400 });
   }
 
   try {
-    const now = Math.floor(Date.now() / 1000);
-    const ts24h = now - 86400;
-    const ticketTopic = ethers.id("TicketPurchased(address,address,bytes32,uint256)");
-    const depositTopic = ethers.id("Deposit(address,uint256)");
-    const publisherTopic = ethers.id("PublisherRegistered(address,string,uint256,address)");
+    const alchemy = new Alchemy({ apiKey, network: Network.BASE_MAINNET });
+    const fromBlock = Number(scanFromBlock) || 0;
 
-    const [block24h, ticketsAll, deposits, publishers] = await Promise.all([
-      getBlockNumberByTime(ts24h),
-      getLogs(ticketTopic, scanFromBlock),
-      getLogs(depositTopic, scanFromBlock),
-      getLogs(publisherTopic, scanFromBlock),
+    const [registerLogs, updateLogs, callLogs, mintLogs, redeemLogs] = await Promise.all([
+      alchemy.core.getLogs({ address: marketplaceAddress, fromBlock, toBlock: "latest", topics: [topics.register] }),
+      alchemy.core.getLogs({ address: marketplaceAddress, fromBlock, toBlock: "latest", topics: [topics.update] }),
+      alchemy.core.getLogs({ address: marketplaceAddress, fromBlock, toBlock: "latest", topics: [topics.call] }),
+      alchemy.core.getLogs({ address: tokenAddress, fromBlock, toBlock: "latest", topics: [topics.minted] }),
+      alchemy.core.getLogs({ address: tokenAddress, fromBlock, toBlock: "latest", topics: [topics.redeemed] }),
     ]);
 
-    const tickets24h = await getLogs(ticketTopic, block24h.toString());
+    type ApiRow = {
+      id: bigint;
+      publisher: string;
+      name: string;
+      metadataURI: string;
+      recommendedPrice: bigint;
+      lastPaidAmount?: bigint;
+      lastPaidAt?: number;
+      callCount: number;
+      metadata?: Record<string, unknown> | null;
+    };
 
+    const apis = new Map<string, ApiRow>();
     const uniquePublishers = new Set<string>();
-    publishers.forEach((log) => {
-      if (log.topics[1]) uniquePublishers.add(getAddressFromTopic(log.topics[1]));
+    let totalVolumeArticl = 0n;
+
+    const combined = [
+      ...registerLogs.map((log) => ({ type: "register" as const, log })),
+      ...updateLogs.map((log) => ({ type: "update" as const, log })),
+      ...callLogs.map((log) => ({ type: "call" as const, log })),
+    ].sort((a, b) => {
+      const blockDiff = toNumber(a.log.blockNumber) - toNumber(b.log.blockNumber);
+      if (blockDiff !== 0) return blockDiff;
+      return toNumber(a.log.logIndex) - toNumber(b.log.logIndex);
     });
 
-    let depositsWei = BigInt(0);
-    deposits.forEach((log) => {
-      depositsWei += BigInt(log.data);
+    combined.forEach(({ type, log }) => {
+      if (type === "register") {
+        const parsed = iface.parseLog(log);
+        const { apiId, publisher, name, metadataURI, recommendedPrice } = parsed.args as unknown as {
+          apiId: bigint;
+          publisher: string;
+          name: string;
+          metadataURI: string;
+          recommendedPrice: bigint;
+        };
+        uniquePublishers.add(publisher);
+        apis.set(apiId.toString(), {
+          id: apiId,
+          publisher,
+          name,
+          metadataURI,
+          recommendedPrice,
+          callCount: 0,
+        });
+      }
+
+      if (type === "update") {
+        const parsed = iface.parseLog(log);
+        const { apiId, metadataURI, recommendedPrice } = parsed.args as unknown as {
+          apiId: bigint;
+          metadataURI: string;
+          recommendedPrice: bigint;
+        };
+        const existing = apis.get(apiId.toString());
+        if (existing) {
+          existing.metadataURI = metadataURI;
+          existing.recommendedPrice = recommendedPrice;
+          apis.set(apiId.toString(), existing);
+        }
+      }
+
+      if (type === "call") {
+        const parsed = iface.parseLog(log);
+        const { apiId, amount } = parsed.args as unknown as {
+          apiId: bigint;
+          amount: bigint;
+        };
+        const blockNum = toNumber(log.blockNumber);
+        const current = apis.get(apiId.toString()) || {
+          id: apiId,
+          publisher: parsed.args.publisher as string,
+          name: `API #${apiId.toString()}`,
+          metadataURI: "",
+          recommendedPrice: 0n,
+          callCount: 0,
+        };
+
+        current.callCount += 1;
+        if (!current.lastPaidAt || blockNum >= current.lastPaidAt) {
+          current.lastPaidAt = blockNum;
+          current.lastPaidAmount = amount;
+        }
+        if (parsed.args.publisher) {
+          uniquePublishers.add(parsed.args.publisher as string);
+        }
+        apis.set(apiId.toString(), current);
+        totalVolumeArticl += amount;
+      }
     });
 
-    let volume24Wei = BigInt(0);
-    tickets24h.forEach((log) => {
-      volume24Wei += BigInt(log.data);
-    });
+    // Hydrate metadata (best-effort)
+    const apiList = Array.from(apis.values());
+    for (const api of apiList) {
+      if (api.metadataURI) {
+        api.metadata = await fetchMetadata(api.metadataURI);
+      }
+    }
 
-    const publisherCounts: Record<string, { count: number; volume: bigint }> = {};
-    ticketsAll.forEach((log) => {
-      const pub = log.topics[2] ? getAddressFromTopic(log.topics[2]) : "";
-      if (!pub) return;
-      if (!publisherCounts[pub]) publisherCounts[pub] = { count: 0, volume: BigInt(0) };
-      publisherCounts[pub].count += 1;
-      publisherCounts[pub].volume += BigInt(log.data);
+    let mintedEth = 0n;
+    let redeemedEth = 0n;
+    mintLogs.forEach((log) => {
+      const parsed = iface.parseLog(log);
+      const { ethIn } = parsed.args as unknown as { ethIn: bigint };
+      mintedEth += ethIn;
     });
-
-    const topPublishers = Object.entries(publisherCounts)
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 3)
-      .map(([publisher, info]) => ({
-        publisher,
-        count: info.count,
-        volume: info.volume.toString(),
-      }));
+    redeemLogs.forEach((log) => {
+      const parsed = iface.parseLog(log);
+      const { ethOut } = parsed.args as unknown as { ethOut: bigint };
+      redeemedEth += ethOut;
+    });
 
     return NextResponse.json({
-      apis: uniquePublishers.size,
-      calls24h: tickets24h.length,
-      depositsEth: ethers.formatEther(depositsWei),
-      totalCalls: ticketsAll.length,
-      volume24hEth: ethers.formatEther(volume24Wei),
-      topPublishers,
-      publishers: Array.from(uniquePublishers),
+      stats: {
+        apiCount: apiList.length,
+        uniquePublishers: uniquePublishers.size,
+        totalCalls: callLogs.length,
+        totalVolumeEth: formatArticlToEth(totalVolumeArticl),
+        mintedEth: ethers.formatEther(mintedEth),
+        redeemedEth: ethers.formatEther(redeemedEth),
+      },
+      apis: apiList.map((api) => ({
+        apiId: api.id.toString(),
+        publisher: api.publisher,
+        name: api.name,
+        metadataURI: api.metadataURI,
+        recommendedPriceEth: formatArticlToEth(api.recommendedPrice),
+        lastPaidPriceEth: api.lastPaidAmount ? formatArticlToEth(api.lastPaidAmount) : null,
+        lastPaidAtBlock: api.lastPaidAt ?? null,
+        callCount: api.callCount,
+        metadata: api.metadata ?? null,
+      })),
     });
   } catch (err) {
     console.error(err);

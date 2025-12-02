@@ -1,2 +1,2 @@
-export { ARTICLClient } from './ARTICLClient';
-export type { ARTICLConfig, Publisher, Ticket } from './ARTICLClient';
+export { ARTICLClient, ARTICL_CONVERSION_FACTOR, ARTICL_DECIMALS, CALL_TYPED_DATA } from "./ARTICLClient";
+export type { ApiOffering, ARTICLConfig, CallAuthorization, SignedCall } from "./ARTICLClient";
