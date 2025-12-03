@@ -6,6 +6,8 @@ import { ARTICLClient, ARTICL_CONVERSION_FACTOR } from "@/lib/articl";
 const tokenAddress = process.env.NEXT_PUBLIC_ATRICL_ADDRESS || "";
 const marketplaceAddress = process.env.NEXT_PUBLIC_ARTICLMarketplace_ADDRESS || "";
 const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "8453");
+const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org";
+const explorerUrl = "https://basescan.org";
 const testMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
 
 export type WalletStatus = { kind: "idle" | "loading" | "success" | "error"; message?: string };
@@ -69,8 +71,30 @@ export function useArticlWallet() {
           await provider.send("wallet_switchEthereumChain", [{ chainId: hexChainId }]);
           net = await provider.getNetwork();
         } catch (switchErr) {
-          setStatus({ kind: "error", message: getErrorMessage(switchErr, "Switch to Base mainnet to continue") });
-          return;
+          const code = (switchErr as { code?: number }).code;
+          if (code === 4902 || code === -32603) {
+            try {
+              await provider.send("wallet_addEthereumChain", [
+                {
+                  chainId: hexChainId,
+                  chainName: "Base",
+                  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                  rpcUrls: [rpcUrl],
+                  blockExplorerUrls: [explorerUrl],
+                },
+              ]);
+              net = await provider.getNetwork();
+            } catch (addErr) {
+              setStatus({
+                kind: "error",
+                message: getErrorMessage(addErr, "Add Base network to your wallet to continue"),
+              });
+              return;
+            }
+          } else {
+            setStatus({ kind: "error", message: getErrorMessage(switchErr, "Switch to Base mainnet to continue") });
+            return;
+          }
         }
         if (net.chainId !== BigInt(chainId)) {
           setStatus({ kind: "error", message: `Wrong network (expected chain ${chainId})` });
