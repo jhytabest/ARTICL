@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "register:publisher": "node scripts/registerPublisher.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -20,11 +22,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@testing-library/react": "^16.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.6",
-    "typescript": "^5"
+    "jsdom": "^25.0.0",
+    "typescript": "^5",
+    "vitest": "^2.0.0"
   }
 }
