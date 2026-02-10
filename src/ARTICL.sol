@@ -84,6 +84,7 @@ contract ARTICL {
         ethAmount = (amount * 1 ether) / CONVERSION_FACTOR;
         if (address(this).balance < ethAmount) revert InsufficientBacking();
 
+        // State changes BEFORE external call (CEI pattern) to prevent reentrancy
         unchecked {
             balanceOf[msg.sender] -= amount;
             totalSupply -= amount;
@@ -92,6 +93,7 @@ contract ARTICL {
         emit Transfer(msg.sender, address(0), amount);
         emit Redeemed(msg.sender, to, amount, ethAmount);
 
+        // External call last
         (bool success, ) = to.call{value: ethAmount}("");
         if (!success) revert RedeemTransferFailed();
     }
@@ -127,16 +129,8 @@ contract ARTICL {
     // ============ Internal ============
 
     function _transfer(address from, address to, uint256 value) internal {
+        if (to == address(0)) revert ZeroAddress();
         if (balanceOf[from] < value) revert InsufficientBalance();
-
-        if (to == address(0)) {
-            unchecked {
-                balanceOf[from] -= value;
-                totalSupply -= value;
-            }
-            emit Transfer(from, address(0), value);
-            return;
-        }
 
         if (value == 0) {
             emit Transfer(from, to, 0);

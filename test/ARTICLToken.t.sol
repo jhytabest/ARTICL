@@ -70,6 +70,27 @@ contract ARTICLTokenTest is Test {
         assertEq(token.balanceOf(bob), 0);
     }
 
+    function testTransferToZeroAddressReverts() public {
+        vm.prank(alice);
+        token.mint{value: 1 ether}(alice);
+
+        vm.prank(alice);
+        vm.expectRevert(ARTICL.ZeroAddress.selector);
+        token.transfer(address(0), 1000);
+    }
+
+    function testTransferFromToZeroAddressReverts() public {
+        vm.prank(alice);
+        token.mint{value: 1 ether}(alice);
+
+        vm.prank(alice);
+        token.approve(bob, 10_000_000);
+
+        vm.prank(bob);
+        vm.expectRevert(ARTICL.ZeroAddress.selector);
+        token.transferFrom(alice, address(0), 1000);
+    }
+
     function testTransferFromZeroAmountPreservesAllowance() public {
         vm.prank(alice);
         token.mint{value: 1 ether}(alice);
