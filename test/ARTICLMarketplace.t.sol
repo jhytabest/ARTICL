@@ -327,11 +327,13 @@ contract ARTICLMarketplaceTest is Test {
             ARTICLMarketplace.SignedCall({buyer: buyer, apiId: apiId, amount: 1000, nonce: nonce, signature: ""});
         c.signature = _sign(c, buyerKey);
 
+        uint256 publisherBalanceBefore = token.balanceOf(publisher);
+
         vm.prank(publisher);
         market.redeemCall(c);
 
         assertTrue(market.usedNonces(buyer, nonce));
-        assertEq(token.balanceOf(publisher), 1000);
+        assertEq(token.balanceOf(publisher), publisherBalanceBefore + 1000);
     }
 
     // ============ Edge Case: registerApi ============

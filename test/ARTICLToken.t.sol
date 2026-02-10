@@ -133,6 +133,10 @@ contract ARTICLTokenTest is Test {
         // ETH backing invariant: contract holds exactly what's needed
         uint256 ethRequired = (expectedMinted * 1 ether) / 1e8;
         assertEq(address(token).balance, ethRequired, "ETH backing mismatch");
+
+        // Dust that cannot mint a full token should be refunded to minter
+        uint256 refund = ethAmount - ethRequired;
+        assertEq(alice.balance, refund, "refund amount mismatch");
     }
 
     /// @dev Mint refund logic: ETH that doesn't divide evenly should refund dust
