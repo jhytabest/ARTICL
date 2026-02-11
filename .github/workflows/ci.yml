@@ -29,6 +29,15 @@ jobs:
       - name: Run Forge tests
         run: forge test -vvv
 
+      - name: Generate gas snapshot
+        run: forge snapshot
+
+      - name: Upload gas snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-gas-report
+          path: .gas-snapshot
+
   client-sdk-tests:
     name: Client SDK Tests (Vitest)
     runs-on: ubuntu-latest
