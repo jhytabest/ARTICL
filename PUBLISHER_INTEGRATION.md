@@ -73,7 +73,7 @@ const marketplace = new ethers.Contract(process.env.MARKETPLACE_ADDRESS!, market
 const tx = await marketplace.registerApi(
   "Weather API",
   "ipfs://weather-api-metadata",
-  25_000_000n // 0.25 ETH worth of ARTICL units at 1e8/ETH
+  25_000_000n // 0.25 ETH worth of ARTICL units (1e8 ARTICL units per ETH)
 );
 await tx.wait();
 ```

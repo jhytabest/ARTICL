@@ -106,13 +106,18 @@ export function createARTICLMiddleware(config: ARTICLMiddlewareConfig) {
       }
 
       // Optional allowance/balance pre-check to avoid revert in redeemCall
-      const [allowance, balance] = await Promise.all([
+      const [allowance, balance, nonceUsed] = await Promise.all([
         token.allowance(payload.buyer, config.marketplaceAddress),
         token.balanceOf(payload.buyer),
+        marketplace.usedNonces(payload.buyer, nonce),
       ]);
       if (allowance < amount || balance < amount) {
         config.onInvalid?.("Insufficient allowance/balance", payload, req);
         return res.status(402).json({ error: "Insufficient allowance or balance" });
+      }
+      if (nonceUsed) {
+        config.onInvalid?.("Nonce already used", payload, req);
+        return res.status(409).json({ error: "Nonce already used" });
       }
 
       // Optional: redeem on-chain immediately

@@ -31,8 +31,8 @@ if (!process.env.MARKETPLACE_ADDRESS || !process.env.TOKEN_ADDRESS) {
 
 const publisherSigner = new ethers.Wallet(process.env.PUBLISHER_PRIVATE_KEY, provider);
 
-const MARKETPLACE_ADDRESS = process.env.MARKETPLACE_ADDRESS; // deployed marketplace
-const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS; // deployed ARTICL token
+const MARKETPLACE_ADDRESS = process.env.MARKETPLACE_ADDRESS!; // deployed marketplace
+const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS!; // deployed ARTICL token
 
 // Parse JSON bodies
 app.use(express.json());
