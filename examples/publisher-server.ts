@@ -16,14 +16,23 @@ import { ethers } from "ethers";
 import { createARTICLMiddleware } from "./publisher-middleware";
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 // Setup provider and signer (publisher signs redeemCall)
-const provider = new ethers.JsonRpcProvider("http://localhost:8545");
-const publisherSigner = new ethers.Wallet("YOUR_PUBLISHER_PRIVATE_KEY", provider);
+const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "http://localhost:8545");
 
-const MARKETPLACE_ADDRESS = "0x..."; // deployed marketplace
-const TOKEN_ADDRESS = "0x..."; // deployed ARTICL token
+if (!process.env.PUBLISHER_PRIVATE_KEY) {
+  throw new Error("Missing PUBLISHER_PRIVATE_KEY env var");
+}
+
+if (!process.env.MARKETPLACE_ADDRESS || !process.env.TOKEN_ADDRESS) {
+  throw new Error("Missing MARKETPLACE_ADDRESS or TOKEN_ADDRESS env vars");
+}
+
+const publisherSigner = new ethers.Wallet(process.env.PUBLISHER_PRIVATE_KEY, provider);
+
+const MARKETPLACE_ADDRESS = process.env.MARKETPLACE_ADDRESS!; // deployed marketplace
+const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS!; // deployed ARTICL token
 
 // Parse JSON bodies
 app.use(express.json());
@@ -34,7 +43,7 @@ const articlMiddleware = createARTICLMiddleware({
   tokenAddress: TOKEN_ADDRESS,
   provider,
   signer: publisherSigner,
-  autoRedeem: true,
+  autoRedeem: process.env.AUTO_REDEEM !== "false",
   onRequest: (payload) => console.log(`📥 Call from ${payload.buyer} for api ${payload.apiId}`),
   onValid: (payload) => console.log(`✅ Authorized call nonce ${payload.nonce}`),
   onInvalid: (reason, payload) => console.log(`❌ Rejected call: ${reason}`, payload),
