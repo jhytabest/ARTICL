@@ -86,6 +86,8 @@ const signed = await client.signCall({ apiId: 1n, amount: 25_000_000n, nonce: 1n
 
 See `examples/publisher-middleware.ts` and `examples/publisher-server.ts` for an Express middleware that performs the verification and optionally redeems on-chain.
 
+For a full runnable setup, read `PUBLISHER_INTEGRATION.md`.
+
 ## Client SDK highlights (`client-sdk/src/ARTICLClient.ts`)
 - `mint`, `redeem`, `approveMarketplace`, `balanceOf`, `allowance`
 - `registerApi`, `updateApi`, `redeemCallOnChain`, `redeemCallsOnChain`
